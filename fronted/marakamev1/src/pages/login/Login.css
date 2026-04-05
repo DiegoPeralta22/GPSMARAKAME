@@ -54,7 +54,7 @@
   width: 100%;
   height: 50%;
 
-  background: url("../assets/be.png") no-repeat center bottom;
+  background: url("../../assets/be.png") no-repeat center bottom;
   background-size: contain;
 
   opacity: 0.25;
