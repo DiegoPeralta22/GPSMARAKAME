@@ -10,8 +10,10 @@ exports.login = async (req, res) => {
       .input('correo', correo)
       .input('password', password)
       .query(`
-        SELECT * FROM Usuario
-        WHERE correo = @correo AND password = @password
+        SELECT u.id_usuario, u.nombre, u.correo, u.subrol, r.nombre AS rol
+        FROM Usuario u
+        JOIN Rol r ON u.id_rol = r.id_rol
+        WHERE u.correo = @correo AND u.password = @password
       `);
 
     if (result.recordset.length > 0) {

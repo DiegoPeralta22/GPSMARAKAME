@@ -7,23 +7,35 @@ export default function Login() {
   const [password, setPassword] = useState("");
 
   const handleLogin = async () => {
-    try {
-      const data = await login(correo, password);
-
-      if (data.user.id_rol === 1) {
-  window.location.href = "/admin";
-} else if (data.user.id_rol === 2) {
-  window.location.href = "/admin";
-} else if (data.user.id_rol === 3) {
-  window.location.href = "/admisiones";
-}else {
-        alert("Credenciales incorrectas");
-      }
-    } catch (error) {
-      console.error(error);
-      alert("Error en el servidor");
+  try {
+    const data = await login(correo, password);
+console.log("data recibida:", data);
+    if (!data.success) {
+      alert("Credenciales incorrectas");
+      return;
     }
-  };
+
+    localStorage.setItem("usuario", JSON.stringify(data.user));
+
+  if (data.user.rol === "director") {
+  window.location.href = "/director";
+} else if (data.user.rol === "administrador") {
+  window.location.href = "/administrador";
+} else if (data.user.rol === "admision") {
+  window.location.href = "/admisiones";
+} else if (data.user.rol === "medico") {
+  window.location.href = "/medico";
+} else if (data.user.rol === "clinico") {
+  window.location.href = "/clinico";
+} else {
+  alert("Rol no reconocido");
+}
+
+  } catch (error) {
+    console.error(error);
+    alert("Error en el servidor");
+  }
+};
 
   return (
     <div className="login-container">
