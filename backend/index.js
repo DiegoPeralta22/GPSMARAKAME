@@ -9,6 +9,9 @@ app.use(express.json());
 const authRoutes = require('./routes/auth.routes');
 app.use('/', authRoutes);
 
+const medicoRoutes = require('./routes/medico.routes');
+app.use('/medico', medicoRoutes);
+
 const config = {
     connectionString: "Driver={ODBC Driver 17 for SQL Server};Server=localhost\\SQLEXPRESS;Database=MARAKAMEV1;Trusted_Connection=yes;"
 };
@@ -80,7 +83,7 @@ app.post("/cuestionario", async (req, res) => {
     }
 });
 
-// GUARDAR INGRESO (todas las respuestas)
+// GUARDAR INGRESO
 app.post("/ingreso", async (req, res) => {
     const { id_cuestionario, respuestas } = req.body;
 
@@ -135,7 +138,5 @@ app.get("/preguntas/:tipo", async (req, res) => {
         res.status(500).send("Error");
     }
 });
-
-
 
 app.listen(3000, () => console.log('Servidor corriendo en puerto 3000 🚀'));
