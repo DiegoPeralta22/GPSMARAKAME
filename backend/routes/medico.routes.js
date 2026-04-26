@@ -31,6 +31,10 @@ router.post('/indicaciones', medico.crearIndicacion);
 router.get('/protocolo/:id_paciente', medico.obtenerProtocolo);
 router.post('/protocolo', medico.crearProtocolo);
 
+// Seguimiento Desintoxicación
+router.get('/seguimiento/:id_protocolo', medico.obtenerSeguimientos);
+router.post('/seguimiento', medico.crearSeguimiento);
+
 // Nota de Evolución
 router.get('/evolucion/:id_paciente', medico.obtenerNotas);
 router.post('/evolucion', medico.crearNota);
@@ -42,5 +46,10 @@ router.post('/laboratorio', medico.crearSolicitudLab);
 // Actividades
 router.get('/actividades/:id_paciente', medico.obtenerActividades);
 router.post('/actividades', medico.crearActividad);
+
+// Notificaciones
+router.get('/notificaciones/:id_usuario', medico.obtenerNotificaciones);
+router.put('/notificaciones/:id_notificacion/leida', medico.marcarLeida);
+router.put('/notificaciones/todas/:id_usuario/leidas', medico.marcarTodasLeidas);
 
 module.exports = router;

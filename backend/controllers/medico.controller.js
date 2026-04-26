@@ -216,7 +216,6 @@ exports.crearValoracionIndependiente = async (req, res) => {
   try {
     const pool = await poolPromise;
 
-    // 1. Crear valoración
     const valoracion = await pool.request()
       .input('id_paciente', id_paciente)
       .input('id_usuario', id_usuario)
@@ -253,7 +252,6 @@ exports.crearValoracionIndependiente = async (req, res) => {
 
     const id_valoracion = valoracion.recordset[0].id_valoracion;
 
-    // 2. Si es apto, crear expediente
     if (parseInt(apto) === 1) {
       await pool.request()
         .input('id_paciente', id_paciente)
@@ -263,7 +261,6 @@ exports.crearValoracionIndependiente = async (req, res) => {
         `);
     }
 
-    // 3. Notificar a usuarios de admisión
     const admision = await pool.request().query(`
       SELECT id_usuario FROM Usuario WHERE rol = 'admision'
     `);
@@ -603,6 +600,69 @@ exports.crearProtocolo = async (req, res) => {
   }
 };
 
+// ==================== SEGUIMIENTO DESINTOXICACIÓN ====================
+
+exports.obtenerSeguimientos = async (req, res) => {
+  const { id_protocolo } = req.params;
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .input('id_protocolo', id_protocolo)
+      .query(`
+        SELECT s.*, u.nombre as nombre_usuario
+        FROM SeguimientoDesintoxicacion s
+        INNER JOIN Usuario u ON s.id_usuario = u.id_usuario
+        WHERE s.id_protocolo = @id_protocolo
+        ORDER BY s.fecha DESC, s.hora DESC
+      `);
+    res.json(result.recordset);
+  } catch (error) {
+    console.log(error);
+    res.status(500).send("Error al obtener seguimientos");
+  }
+};
+
+exports.crearSeguimiento = async (req, res) => {
+  const {
+    id_protocolo, id_paciente, id_usuario, fecha, hora,
+    presion_arterial, frecuencia_cardiaca, temperatura,
+    glucosa, puntuacion_ciwa, estado_general, observaciones
+  } = req.body;
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .input('id_protocolo', id_protocolo)
+      .input('id_paciente', id_paciente)
+      .input('id_usuario', id_usuario)
+      .input('fecha', fecha)
+      .input('hora', hora)
+      .input('presion_arterial', presion_arterial || null)
+      .input('frecuencia_cardiaca', frecuencia_cardiaca || null)
+      .input('temperatura', temperatura || null)
+      .input('glucosa', glucosa || null)
+      .input('puntuacion_ciwa', puntuacion_ciwa || null)
+      .input('estado_general', estado_general || null)
+      .input('observaciones', observaciones || null)
+      .query(`
+        INSERT INTO SeguimientoDesintoxicacion (
+          id_protocolo, id_paciente, id_usuario, fecha, hora,
+          presion_arterial, frecuencia_cardiaca, temperatura,
+          glucosa, puntuacion_ciwa, estado_general, observaciones
+        )
+        OUTPUT INSERTED.id_seguimiento
+        VALUES (
+          @id_protocolo, @id_paciente, @id_usuario, @fecha, @hora,
+          @presion_arterial, @frecuencia_cardiaca, @temperatura,
+          @glucosa, @puntuacion_ciwa, @estado_general, @observaciones
+        )
+      `);
+    res.json(result.recordset[0]);
+  } catch (error) {
+    console.log(error);
+    res.status(500).send("Error al crear seguimiento");
+  }
+};
+
 // ==================== NOTA DE EVOLUCIÓN ====================
 
 exports.obtenerNotas = async (req, res) => {
@@ -808,5 +868,60 @@ exports.crearActividad = async (req, res) => {
   } catch (error) {
     console.log(error);
     res.status(500).send("Error al crear actividad");
+  }
+};
+
+// ==================== NOTIFICACIONES ====================
+
+exports.obtenerNotificaciones = async (req, res) => {
+  const { id_usuario } = req.params;
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .input('id_usuario', id_usuario)
+      .query(`
+        SELECT TOP 20 *
+        FROM Notificacion
+        WHERE id_usuario_destino = @id_usuario
+        ORDER BY fecha DESC
+      `);
+    res.json(result.recordset);
+  } catch (error) {
+    console.log(error);
+    res.status(500).send("Error al obtener notificaciones");
+  }
+};
+
+exports.marcarLeida = async (req, res) => {
+  const { id_notificacion } = req.params;
+  try {
+    const pool = await poolPromise;
+    await pool.request()
+      .input('id_notificacion', id_notificacion)
+      .query(`
+        UPDATE Notificacion SET leida = 1
+        WHERE id_notificacion = @id_notificacion
+      `);
+    res.json({ mensaje: "Notificación marcada como leída" });
+  } catch (error) {
+    console.log(error);
+    res.status(500).send("Error al marcar notificación");
+  }
+};
+
+exports.marcarTodasLeidas = async (req, res) => {
+  const { id_usuario } = req.params;
+  try {
+    const pool = await poolPromise;
+    await pool.request()
+      .input('id_usuario', id_usuario)
+      .query(`
+        UPDATE Notificacion SET leida = 1
+        WHERE id_usuario_destino = @id_usuario AND leida = 0
+      `);
+    res.json({ mensaje: "Todas marcadas como leídas" });
+  } catch (error) {
+    console.log(error);
+    res.status(500).send("Error al marcar notificaciones");
   }
 };

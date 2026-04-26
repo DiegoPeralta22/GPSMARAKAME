@@ -1,12 +1,18 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   obtenerEstadisticas,
   obtenerPacientesRecientes,
-  obtenerTareasPendientes
+  obtenerTareasPendientes,
+  obtenerNotificaciones,
+  marcarNotificacionLeida,
+  marcarTodasLeidas
 } from "../../services/medicoService";
 import Pacientes from "./Pacientes";
 import Expediente from "./Expediente";
 import Valoracion from "./Valoracion";
+import Desintoxicacion from "./Desintoxicacion";
+import Indicaciones from "./Indicaciones";
+import Laboratorio from "./Laboratorio";
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -25,7 +31,7 @@ const styles = `
   .med-avatar { width: 34px; height: 34px; border-radius: 50%; background: #3b82f6; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; font-weight: 700; flex-shrink: 0; }
   .med-sidebar-footer-info h4 { color: #fff; font-size: 12px; font-weight: 600; }
   .med-sidebar-footer-info p { color: rgba(255,255,255,0.4); font-size: 10px; }
-  .med-topbar { background: #111827; position: fixed; top: 0; left: 0; right: 0; height: 36px; display: flex; align-items: center; padding: 0 16px; z-index: 200; }
+  .med-topbar { background: #111827; position: fixed; top: 0; left: 0; right: 0; height: 36px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; z-index: 200; }
   .med-topbar span { color: rgba(255,255,255,0.5); font-size: 11px; }
   .med-main { margin-left: 200px; flex: 1; padding: 28px 32px; margin-top: 36px; }
   .med-page-title { font-size: 24px; font-weight: 700; color: #111827; letter-spacing: -0.4px; }
@@ -66,6 +72,36 @@ const styles = `
   .med-action-label { font-size: 12px; color: #374151; font-weight: 500; text-align: center; }
   .med-empty { text-align: center; padding: 24px; color: #9ca3af; font-size: 13px; }
   .med-loading { text-align: center; padding: 24px; color: #9ca3af; font-size: 13px; }
+
+  /* NOTIFICACIONES */
+  .med-notif-btn { position: relative; background: none; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; }
+  .med-notif-btn svg { width: 18px; height: 18px; color: rgba(255,255,255,0.6); }
+  .med-notif-btn:hover svg { color: #fff; }
+  .med-notif-counter { position: absolute; top: -2px; right: -2px; background: #ef4444; color: #fff; font-size: 9px; font-weight: 700; width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+  .med-notif-panel { position: fixed; top: 36px; right: 0; width: 360px; height: calc(100vh - 36px); background: #fff; box-shadow: -4px 0 24px rgba(0,0,0,0.12); z-index: 300; display: flex; flex-direction: column; border-left: 1px solid #e5e7eb; }
+  .med-notif-panel-header { padding: 16px 20px; border-bottom: 1px solid #f3f4f6; display: flex; align-items: center; justify-content: space-between; }
+  .med-notif-panel-title { font-size: 15px; font-weight: 600; color: #111827; }
+  .med-notif-panel-actions { display: flex; align-items: center; gap: 10px; }
+  .med-notif-marcar-todas { font-size: 11px; color: #3b82f6; cursor: pointer; background: none; border: none; font-family: 'Inter', sans-serif; font-weight: 500; }
+  .med-notif-close { background: none; border: none; cursor: pointer; color: #9ca3af; font-size: 18px; line-height: 1; }
+  .med-notif-close:hover { color: #374151; }
+  .med-notif-list { flex: 1; overflow-y: auto; }
+  .med-notif-item { padding: 14px 20px; border-bottom: 1px solid #f3f4f6; cursor: pointer; transition: background 0.1s; display: flex; gap: 12px; align-items: flex-start; }
+  .med-notif-item:hover { background: #f9fafb; }
+  .med-notif-item.no-leida { background: #eff6ff; border-left: 3px solid #3b82f6; }
+  .med-notif-item.no-leida:hover { background: #dbeafe; }
+  .med-notif-icon { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 14px; }
+  .med-notif-icon.alerta { background: #fff1f2; }
+  .med-notif-icon.info { background: #eff6ff; }
+  .med-notif-icon.recordatorio { background: #fff7ed; }
+  .med-notif-icon.apta { background: #f0fdf4; }
+  .med-notif-icon.no-apta { background: #fff1f2; }
+  .med-notif-content { flex: 1; }
+  .med-notif-msg { font-size: 13px; color: #374151; line-height: 1.4; }
+  .med-notif-fecha { font-size: 11px; color: #9ca3af; margin-top: 4px; }
+  .med-notif-dot { width: 8px; height: 8px; border-radius: 50%; background: #3b82f6; flex-shrink: 0; margin-top: 4px; }
+  .med-notif-empty { text-align: center; padding: 48px 20px; color: #9ca3af; font-size: 13px; }
+  .med-notif-overlay { position: fixed; inset: 0; z-index: 250; }
 `;
 
 const NAV_ITEMS = [
@@ -90,7 +126,41 @@ const ICONS = {
   activity: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
   flask: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 3h6l1 9H8L9 3z"/><path d="M6.5 21a5 5 0 0 0 11 0c0-3-2.5-5.5-5.5-8.5C9 15.5 6.5 18 6.5 21z"/></svg>,
   calendar: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+  bell: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
 };
+
+const SECCIONES_LISTAS = ["dashboard", "pacientes", "expediente", "valoracion", "desintoxicacion", "indicaciones", "laboratorio"];
+
+function getNotifIconClass(tipo) {
+  if (!tipo) return "info";
+  if (tipo.includes("apta") && !tipo.includes("no")) return "apta";
+  if (tipo.includes("no_apta")) return "no-apta";
+  if (tipo.includes("urgente") || tipo.includes("critico")) return "alerta";
+  if (tipo.includes("recordatorio") || tipo.includes("seguimiento")) return "recordatorio";
+  return "info";
+}
+
+function getNotifEmoji(tipo) {
+  if (!tipo) return "🔔";
+  if (tipo.includes("apta") && !tipo.includes("no")) return "✅";
+  if (tipo.includes("no_apta")) return "❌";
+  if (tipo.includes("desintox")) return "💊";
+  if (tipo.includes("seguimiento")) return "⏰";
+  if (tipo.includes("urgente")) return "🚨";
+  if (tipo.includes("laboratorio")) return "🔬";
+  return "🔔";
+}
+
+function formatFecha(fecha) {
+  if (!fecha) return "—";
+  const d = new Date(fecha);
+  const ahora = new Date();
+  const diff = Math.floor((ahora - d) / 1000 / 60);
+  if (diff < 1) return "Ahora mismo";
+  if (diff < 60) return `Hace ${diff} min`;
+  if (diff < 1440) return `Hace ${Math.floor(diff / 60)}h`;
+  return d.toLocaleDateString();
+}
 
 export default function Medico() {
   const [seccionActiva, setSeccionActiva] = useState("dashboard");
@@ -102,11 +172,26 @@ export default function Medico() {
   const [pacienteActivo, setPacienteActivo] = useState(null);
   const [pacienteInfo, setPacienteInfo] = useState(null);
 
+  // Notificaciones
+  const [notificaciones, setNotificaciones] = useState([]);
+  const [panelAbierto, setPanelAbierto] = useState(false);
+  const noLeidas = notificaciones.filter(n => !n.leida).length;
+
   useEffect(() => {
     const u = JSON.parse(localStorage.getItem("usuario") || "{}");
     setUsuario(u);
     cargarDashboard();
+    if (u?.id_usuario) cargarNotificaciones(u.id_usuario);
   }, []);
+
+  // Polling de notificaciones cada 60 segundos
+  useEffect(() => {
+    if (!usuario?.id_usuario) return;
+    const interval = setInterval(() => {
+      cargarNotificaciones(usuario.id_usuario);
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [usuario]);
 
   const cargarDashboard = async () => {
     try {
@@ -123,6 +208,37 @@ export default function Medico() {
       console.error("Error al cargar dashboard:", error);
     } finally {
       setCargando(false);
+    }
+  };
+
+  const cargarNotificaciones = async (id_usuario) => {
+    try {
+      const data = await obtenerNotificaciones(id_usuario);
+      setNotificaciones(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Error al cargar notificaciones:", error);
+    }
+  };
+
+  const handleMarcarLeida = async (notif) => {
+    if (notif.leida) return;
+    try {
+      await marcarNotificacionLeida(notif.id_notificacion);
+      setNotificaciones(prev =>
+        prev.map(n => n.id_notificacion === notif.id_notificacion ? { ...n, leida: 1 } : n)
+      );
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleMarcarTodas = async () => {
+    if (!usuario?.id_usuario) return;
+    try {
+      await marcarTodasLeidas(usuario.id_usuario);
+      setNotificaciones(prev => prev.map(n => ({ ...n, leida: 1 })));
+    } catch (error) {
+      console.error(error);
     }
   };
 
@@ -150,13 +266,74 @@ export default function Medico() {
     <>
       <style>{styles}</style>
       <div className="med-app">
+
+        {/* OVERLAY para cerrar panel */}
+        {panelAbierto && (
+          <div className="med-notif-overlay" onClick={() => setPanelAbierto(false)} />
+        )}
+
         <div className="med-topbar">
           <span>
             {seccionActiva === "expediente" ? "Expediente" :
              seccionActiva === "valoracion" ? "Valoración Médica" :
+             seccionActiva === "desintoxicacion" ? "Protocolo de Desintoxicación" :
+             seccionActiva === "indicaciones" ? "Indicaciones Médicas" :
+             seccionActiva === "laboratorio" ? "Solicitud de Laboratorio" :
              NAV_ITEMS.find(n => n.id === seccionActiva)?.label || "Dashboard"}
           </span>
+          {/* CAMPANA */}
+          <button className="med-notif-btn" onClick={() => setPanelAbierto(!panelAbierto)}>
+            {ICONS.bell}
+            {noLeidas > 0 && (
+              <span className="med-notif-counter">{noLeidas > 9 ? "9+" : noLeidas}</span>
+            )}
+          </button>
         </div>
+
+        {/* PANEL DE NOTIFICACIONES */}
+        {panelAbierto && (
+          <div className="med-notif-panel">
+            <div className="med-notif-panel-header">
+              <span className="med-notif-panel-title">
+                🔔 Notificaciones {noLeidas > 0 && <span style={{ fontSize: 12, color: "#3b82f6", fontWeight: 700 }}>({noLeidas} nuevas)</span>}
+              </span>
+              <div className="med-notif-panel-actions">
+                {noLeidas > 0 && (
+                  <button className="med-notif-marcar-todas" onClick={handleMarcarTodas}>
+                    Marcar todas como leídas
+                  </button>
+                )}
+                <button className="med-notif-close" onClick={() => setPanelAbierto(false)}>✕</button>
+              </div>
+            </div>
+
+            <div className="med-notif-list">
+              {notificaciones.length === 0 ? (
+                <div className="med-notif-empty">
+                  <div style={{ fontSize: 32, marginBottom: 8 }}>🔔</div>
+                  No tienes notificaciones
+                </div>
+              ) : (
+                notificaciones.map((n, i) => (
+                  <div
+                    key={i}
+                    className={`med-notif-item ${!n.leida ? "no-leida" : ""}`}
+                    onClick={() => handleMarcarLeida(n)}
+                  >
+                    <div className={`med-notif-icon ${getNotifIconClass(n.tipo)}`}>
+                      {getNotifEmoji(n.tipo)}
+                    </div>
+                    <div className="med-notif-content">
+                      <div className="med-notif-msg">{n.mensaje}</div>
+                      <div className="med-notif-fecha">{formatFecha(n.fecha)}</div>
+                    </div>
+                    {!n.leida && <div className="med-notif-dot" />}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
 
         <aside className="med-sidebar">
           <div className="med-sidebar-header" style={{ marginTop: 36 }}>
@@ -278,8 +455,23 @@ export default function Medico() {
             <Valoracion rol={rol} />
           )}
 
+          {/* DESINTOXICACIÓN */}
+          {seccionActiva === "desintoxicacion" && (
+            <Desintoxicacion rol={rol} />
+          )}
+
+          {/* INDICACIONES */}
+          {seccionActiva === "indicaciones" && (
+            <Indicaciones rol={rol} />
+          )}
+
+          {/* LABORATORIO */}
+          {seccionActiva === "laboratorio" && (
+            <Laboratorio rol={rol} />
+          )}
+
           {/* SECCIONES EN DESARROLLO */}
-          {!["dashboard", "pacientes", "expediente", "valoracion"].includes(seccionActiva) && (
+          {!SECCIONES_LISTAS.includes(seccionActiva) && (
             pacienteActivo ? (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh", gap: 12 }}>
                 <h2 style={{ fontSize: 20, fontWeight: 600, color: "#374151" }}>

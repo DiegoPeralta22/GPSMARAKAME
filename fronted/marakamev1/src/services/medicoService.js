@@ -125,6 +125,22 @@ export const crearProtocolo = async (datos) => {
   return res.json();
 };
 
+// ==================== SEGUIMIENTO DESINTOXICACIÓN ====================
+
+export const obtenerSeguimientos = async (id_protocolo) => {
+  const res = await fetch(`${BASE_URL}/seguimiento/${id_protocolo}`);
+  return res.json();
+};
+
+export const crearSeguimiento = async (datos) => {
+  const res = await fetch(`${BASE_URL}/seguimiento`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(datos),
+  });
+  return res.json();
+};
+
 // ==================== NOTA DE EVOLUCIÓN ====================
 
 export const obtenerNotas = async (id_paciente) => {
@@ -169,6 +185,27 @@ export const crearActividad = async (datos) => {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(datos),
+  });
+  return res.json();
+};
+
+// ==================== NOTIFICACIONES ====================
+
+export const obtenerNotificaciones = async (id_usuario) => {
+  const res = await fetch(`${BASE_URL}/notificaciones/${id_usuario}`);
+  return res.json();
+};
+
+export const marcarNotificacionLeida = async (id_notificacion) => {
+  const res = await fetch(`${BASE_URL}/notificaciones/${id_notificacion}/leida`, {
+    method: "PUT"
+  });
+  return res.json();
+};
+
+export const marcarTodasLeidas = async (id_usuario) => {
+  const res = await fetch(`${BASE_URL}/notificaciones/todas/${id_usuario}/leidas`, {
+    method: "PUT"
   });
   return res.json();
 };
