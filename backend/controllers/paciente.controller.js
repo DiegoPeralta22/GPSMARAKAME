@@ -1,4 +1,4 @@
-const { pool, poolConnect } = require('../db/connection');
+const { sql, pool, poolConnect } = require('../db/connection');
 
 exports.buscarPacientes = async (req, res) => {
   const { nombre } = req.query;
@@ -40,17 +40,19 @@ exports.crearPaciente = async (req, res) => {
   try {
     await poolConnect;
 
+    const edadInt = edad ? parseInt(edad) : null;
+
     const result = await pool.request()
-      .input('nombre', nombre)
-      .input('apellido', apellido)
-      .input('fecha_nacimiento', fecha_nacimiento)
-      .input('edad', edad)
-      .input('genero', genero)
-      .input('telefono', telefono)
-      .input('direccion', direccion)
-      .input('estado_civil', estado_civil)
-      .input('escolaridad', escolaridad)
-      .input('ocupacion', ocupacion)
+      .input('nombre', sql.NVarChar, nombre || null)
+      .input('apellido', sql.NVarChar, apellido || null)
+      .input('fecha_nacimiento', sql.Date, fecha_nacimiento || null)
+      .input('edad', sql.Int, isNaN(edadInt) ? null : edadInt)
+      .input('genero', sql.NVarChar, genero || null)
+      .input('telefono', sql.NVarChar, telefono || null)
+      .input('direccion', sql.NVarChar, direccion || null)
+      .input('estado_civil', sql.NVarChar, estado_civil || null)
+      .input('escolaridad', sql.NVarChar, escolaridad || null)
+      .input('ocupacion', sql.NVarChar, ocupacion || null)
       .query(`
         INSERT INTO Paciente (
           nombre,

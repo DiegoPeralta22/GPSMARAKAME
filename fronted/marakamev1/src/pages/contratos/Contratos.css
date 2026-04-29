@@ -1,11 +1,12 @@
-.layout {
+.con-layout {
   display: flex;
-  height: 100vh;
+  height: 100%;
   font-family: 'Segoe UI', sans-serif;
   background: #f4f6f9;
+  overflow: hidden;
 }
 
-.sidebar {
+.con-sidebar {
   width: 220px;
   background: #1a1a2e;
   color: white;
@@ -13,13 +14,16 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  height: 100%;
+  overflow-y: auto;
+  flex-shrink: 0;
 }
 
-.sidebar h2 { font-size: 18px; margin: 0; }
-.sidebar p  { font-size: 11px; color: #aaa; margin: 0 0 16px; }
+.con-sidebar h2 { font-size: 18px; margin: 0; }
+.con-sidebar p  { font-size: 11px; color: #aaa; margin: 0 0 16px; }
 
-.sidebar ul { list-style: none; padding: 0; margin: 0; }
-.sidebar li {
+.con-sidebar ul { list-style: none; padding: 0; margin: 0; }
+.con-sidebar li {
   padding: 10px 12px;
   border-radius: 8px;
   cursor: pointer;
@@ -27,17 +31,19 @@
   color: #ccc;
   transition: background 0.2s;
 }
-.sidebar li:hover { background: #2a2a4a; color: white; }
-.sidebar li.active { background: #4CAF50; color: white; }
+.con-sidebar li:hover { background: #2a2a4a; color: white; }
+.con-sidebar li.active { background: #4CAF50; color: white; }
 
-.main {
+.con-main {
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  height: 100%;
+  overflow-y: auto;
+  min-width: 0;
 }
 
-.topbar {
+.con-topbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -46,8 +52,8 @@
   border-bottom: 1px solid #e0e0e0;
 }
 
-.topbar h2 { margin: 0; font-size: 20px; color: #1a1a2e; }
-.subtitulo  { font-size: 12px; color: #888; }
+.con-topbar h2 { margin: 0; font-size: 20px; color: #1a1a2e; }
+.con-subtitulo  { font-size: 12px; color: #888; }
 
 .btn-save {
   background: #1a7a4a;

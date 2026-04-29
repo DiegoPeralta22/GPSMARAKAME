@@ -23,6 +23,7 @@ const upload = multer({
 });
 
 router.post("/upload", upload.single("archivo"), contratoController.subirContrato);
+router.get("/pacientes-aptos", contratoController.getPacientesAptos);
 router.get("/:id_paciente", contratoController.obtenerContratos);
 
 module.exports = router;

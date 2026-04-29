@@ -397,3 +397,39 @@ SELECT * FROM Paciente
 SELECT * FROM Cuestionario
 SELECT * FROM RespuestaCuestionario where id_cuestionario = 5
 Select * FROM Familiar
+
+-- =============================================
+-- ESTUDIO SOCIOECONÓMICO (ampliado)
+-- =============================================
+ALTER TABLE EstudioSocioeconomico ADD datos_json NVARCHAR(MAX);
+ALTER TABLE EstudioSocioeconomico ADD folio NVARCHAR(50);
+ALTER TABLE EstudioSocioeconomico ADD status NVARCHAR(50) DEFAULT 'borrador';
+ALTER TABLE EstudioSocioeconomico ADD id_usuario INT;
+ALTER TABLE EstudioSocioeconomico ADD CONSTRAINT FK_Estudio_Usuario
+    FOREIGN KEY (id_usuario) REFERENCES Usuario(id_usuario);
+
+-- =============================================
+-- DECISIÓN DE INGRESO (admisiones aprueba/rechaza)
+-- =============================================
+CREATE TABLE DecisionIngreso (
+    id_decision    INT IDENTITY PRIMARY KEY,
+    id_paciente    INT NOT NULL FOREIGN KEY REFERENCES Paciente(id_paciente),
+    id_usuario     INT FOREIGN KEY REFERENCES Usuario(id_usuario),
+    decision       NVARCHAR(20),        -- 'aprobado' | 'rechazado'
+    motivo_rechazo NVARCHAR(MAX),
+    fecha          DATETIME DEFAULT GETDATE()
+);
+
+-- =============================================
+-- TRASLADO E INVENTARIO (clínico)
+-- =============================================
+CREATE TABLE Traslado (
+    id_traslado             INT IDENTITY PRIMARY KEY,
+    id_paciente             INT NOT NULL FOREIGN KEY REFERENCES Paciente(id_paciente),
+    id_usuario              INT FOREIGN KEY REFERENCES Usuario(id_usuario),
+    fecha                   DATETIME DEFAULT GETDATE(),
+    tiene_sustancias        BIT DEFAULT 0,
+    descripcion_sustancias  NVARCHAR(MAX),
+    inventario_json         NVARCHAR(MAX),   -- JSON con lista de pertenencias
+    observaciones           NVARCHAR(MAX)
+);

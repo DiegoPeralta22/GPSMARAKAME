@@ -1,7 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import "../admisiones/Admisiones.css";
-import "./Contratos.css";
 
 const IcoGrid   = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>;
 const IcoHome   = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 21V12h6v9"/></svg>;
@@ -14,37 +13,44 @@ const IcoDoc    = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="no
 const IcoFolder = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>;
 const IcoUsers  = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
 
-const TIPOS = [
-  { key: "nicotina",    label: "Protocolo Libre de Nicotina",  desc: "Compromiso de desintoxicación tabáquica" },
-  { key: "no_suicidio", label: "Contrato de No Suicidio",      desc: "Pacto terapéutico de preservación de vida" },
+const TIPOS_DOC = [
+  { key: "contrato_terapeutico",    label: "Contrato Terapéutico",           desc: "Compromisos del paciente con el programa" },
+  { key: "consentimiento",          label: "Consentimiento Informado",        desc: "Autorización para el tratamiento" },
+  { key: "carta_autorizacion",      label: "Carta de Autorización",           desc: "Autorización del familiar responsable" },
+  { key: "reglamento",              label: "Reglamento Interno",              desc: "Normas y reglas del centro" },
+  { key: "carta_responsiva",        label: "Carta Responsiva Familiar",       desc: "Responsabilidad del familiar ante el tratamiento" },
+  { key: "nicotina",                label: "Protocolo Libre de Nicotina",     desc: "Compromiso de desintoxicación tabáquica" },
+  { key: "no_suicidio",             label: "Contrato de No Suicidio",         desc: "Pacto terapéutico de preservación de vida" },
 ];
 
 const badge = (bg, color, text) => (
   <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 8, background: bg, color, whiteSpace: "nowrap" }}>{text}</span>
 );
 
-export default function Contratos() {
+const labelTipo = (key) => TIPOS_DOC.find(t => t.key === key)?.label || key;
+
+export default function Preingreso() {
   const navigate = useNavigate();
   const usuario = JSON.parse(localStorage.getItem("usuario") || "{}");
 
-  // --- Vista: "lista" | "subir" ---
   const [vista, setVista] = useState("lista");
   const [pacienteSeleccionado, setPacienteSeleccionado] = useState(null);
 
-  // --- Lista ---
+  // Lista
   const [pacientes, setPacientes]   = useState([]);
   const [cargando, setCargando]     = useState(false);
   const [error, setError]           = useState(false);
   const [busqueda, setBusqueda]     = useState("");
   const [filtro, setFiltro]         = useState("todos");
 
-  // --- Upload ---
-  const [seleccionado, setSeleccionado] = useState("nicotina");
-  const [archivos, setArchivos]         = useState({ nicotina: null, no_suicidio: null });
-  const [previews, setPreviews]         = useState({ nicotina: null, no_suicidio: null });
-  const [firmado, setFirmado]           = useState(false);
+  // Subir documento
+  const initArchivos = () => Object.fromEntries(TIPOS_DOC.map(t => [t.key, null]));
+  const [seleccionado, setSeleccionado] = useState("contrato_terapeutico");
+  const [archivos, setArchivos]         = useState(initArchivos());
+  const [previews, setPreviews]         = useState(initArchivos());
+  const [aceptado, setAceptado]         = useState(false);
   const [guardando, setGuardando]       = useState(false);
-  const [contratosActuales, setContratosActuales] = useState([]);
+  const [docsActuales, setDocsActuales] = useState([]);
 
   useEffect(() => { cargar(); }, []);
 
@@ -64,7 +70,9 @@ export default function Contratos() {
 
   const filtrados = pacientes.filter(p => {
     const nombre = `${p.nombre} ${p.apellido}`.toLowerCase();
-    if (busqueda.trim() && !nombre.includes(busqueda.toLowerCase())) return false;
+    const idStr = String(p.id_paciente);
+    const q = busqueda.trim().toLowerCase();
+    if (q && !nombre.includes(q) && !idStr.includes(q)) return false;
     if (filtro === "con")  return (p.num_contratos ?? 0) > 0;
     if (filtro === "sin")  return (p.num_contratos ?? 0) === 0;
     return true;
@@ -74,18 +82,18 @@ export default function Contratos() {
     f === "con" ? (p.num_contratos ?? 0) > 0 : (p.num_contratos ?? 0) === 0
   ).length;
 
-  const abrirSubir = async (p) => {
+  const abrirDocs = async (p) => {
     setPacienteSeleccionado(p);
-    setArchivos({ nicotina: null, no_suicidio: null });
-    setPreviews({ nicotina: null, no_suicidio: null });
-    setFirmado(false);
-    setSeleccionado("nicotina");
-    setVista("subir");
+    setArchivos(initArchivos());
+    setPreviews(initArchivos());
+    setAceptado(false);
+    setSeleccionado("contrato_terapeutico");
+    setVista("docs");
     try {
       const res = await fetch(`http://localhost:3000/contratos/${p.id_paciente}`);
       const data = await res.json();
-      setContratosActuales(Array.isArray(data) ? data : []);
-    } catch { setContratosActuales([]); }
+      setDocsActuales(Array.isArray(data) ? data : []);
+    } catch { setDocsActuales([]); }
   };
 
   const handleArchivo = (e) => {
@@ -99,7 +107,7 @@ export default function Contratos() {
   const handleGuardar = async () => {
     const archivo = archivos[seleccionado];
     if (!archivo) return alert("Primero sube el documento PDF");
-    if (!firmado) return alert("Debes aceptar los términos antes de guardar");
+    if (!aceptado) return alert("Debes confirmar los términos antes de guardar");
     if (!pacienteSeleccionado) return;
 
     setGuardando(true);
@@ -115,29 +123,28 @@ export default function Contratos() {
       });
 
       if (res.ok) {
-        alert("Contrato guardado correctamente");
         const updated = await fetch(`http://localhost:3000/contratos/${pacienteSeleccionado.id_paciente}`);
         const data = await updated.json();
-        setContratosActuales(Array.isArray(data) ? data : []);
+        setDocsActuales(Array.isArray(data) ? data : []);
         setArchivos(prev => ({ ...prev, [seleccionado]: null }));
         setPreviews(prev => ({ ...prev, [seleccionado]: null }));
-        setFirmado(false);
-        // Actualizar contador en la lista
+        setAceptado(false);
+        const newCount = (pacienteSeleccionado.num_contratos ?? 0) + 1;
         setPacientes(prev => prev.map(p =>
           p.id_paciente === pacienteSeleccionado.id_paciente
-            ? { ...p, num_contratos: (p.num_contratos ?? 0) + 1 }
+            ? { ...p, num_contratos: newCount }
             : p
         ));
-        setPacienteSeleccionado(prev => ({ ...prev, num_contratos: (prev.num_contratos ?? 0) + 1 }));
+        setPacienteSeleccionado(prev => ({ ...prev, num_contratos: newCount }));
       } else {
-        alert("Error al guardar el contrato");
+        alert("Error al guardar el documento");
       }
-    } catch (err) {
+    } catch {
       alert("Error de conexión");
     } finally { setGuardando(false); }
   };
 
-  const tipoActual = TIPOS.find(t => t.key === seleccionado);
+  const tipoActual = TIPOS_DOC.find(t => t.key === seleccionado);
   const preview = previews[seleccionado];
 
   const sidebar = (
@@ -153,7 +160,7 @@ export default function Contratos() {
         <li onClick={() => navigate("/estudio")}><IcoMoney />Estudio Socioeconómico</li>
         <li onClick={() => navigate("/citas")}><IcoCal />Agenda de Citas</li>
         <li onClick={() => navigate("/validacion")}><IcoShield />Validación de Ingreso</li>
-        <li className="active"><IcoDoc />Contratos</li>
+        <li className="active"><IcoDoc />Preingreso</li>
         <li onClick={() => navigate("/expedientes")}><IcoFolder />Expedientes</li>
       </ul>
     </div>
@@ -166,16 +173,17 @@ export default function Contratos() {
         {sidebar}
         <div className="main" style={{ overflowY: "auto" }}>
           <div className="header">
-            <h3>Contratos</h3>
+            <h3>Preingreso — Documentos</h3>
             <input
-              placeholder="Buscar por nombre..."
+              placeholder="Buscar por nombre o N° ID..."
               value={busqueda}
               onChange={e => setBusqueda(e.target.value)}
+              style={{ minWidth: 220 }}
             />
           </div>
 
           <div style={{ padding: "16px 24px 0", display: "flex", gap: 8 }}>
-            {[["todos","Todos"], ["con","Con contrato"], ["sin","Sin contrato"]].map(([val, label]) => (
+            {[["todos","Todos"], ["con","Con documentos"], ["sin","Sin documentos"]].map(([val, label]) => (
               <button
                 key={val}
                 onClick={() => setFiltro(val)}
@@ -197,16 +205,14 @@ export default function Contratos() {
             ) : error ? (
               <div style={{ background: "#fff1f2", border: "1px solid #fecaca", borderRadius: 10, padding: 24, textAlign: "center" }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: "#ef4444", marginBottom: 8 }}>No se pudo conectar al servidor</div>
-                <button onClick={cargar} style={{ padding: "8px 20px", background: "#0b5d5b", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-                  Reintentar
-                </button>
+                <button onClick={cargar} style={{ padding: "8px 20px", background: "#0b5d5b", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Reintentar</button>
               </div>
             ) : (
               <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e5e7eb", overflow: "hidden" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                   <thead>
                     <tr style={{ background: "#f9fafb" }}>
-                      {["ID", "Nombre", "Edad", "Contratos", "Fecha aprobación", ""].map((h, i) => (
+                      {["ID", "Nombre", "Edad", "Documentos", "Fecha aprobación", ""].map((h, i) => (
                         <th key={i} style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", borderBottom: "1px solid #e5e7eb" }}>{h}</th>
                       ))}
                     </tr>
@@ -215,7 +221,11 @@ export default function Contratos() {
                     {filtrados.length === 0 ? (
                       <tr>
                         <td colSpan={6} style={{ padding: 40, textAlign: "center", color: "#9ca3af" }}>
-                          {busqueda ? "Sin resultados para esa búsqueda" : filtro === "sin" ? "Todos los pacientes aprobados ya tienen contratos" : "No hay pacientes aprobados aún"}
+                          {busqueda
+                            ? "Sin resultados para esa búsqueda"
+                            : filtro === "sin"
+                              ? "Todos los pacientes aprobados ya tienen documentos"
+                              : "No hay pacientes aprobados aún"}
                         </td>
                       </tr>
                     ) : filtrados.map((p, i) => (
@@ -224,13 +234,13 @@ export default function Contratos() {
                         style={{ borderBottom: "1px solid #f3f4f6", cursor: "pointer" }}
                         onMouseEnter={e => e.currentTarget.style.background = "#f9fafb"}
                         onMouseLeave={e => e.currentTarget.style.background = ""}
-                        onClick={() => abrirSubir(p)}
+                        onClick={() => abrirDocs(p)}
                       >
-                        <td style={{ padding: "12px 14px", color: "#9ca3af", fontSize: 12 }}>MK-{new Date().getFullYear()}-{String(p.id_paciente).padStart(3,"0")}</td>
+                        <td style={{ padding: "12px 14px", color: "#9ca3af", fontSize: 12 }}>{p.id_paciente}</td>
                         <td style={{ padding: "12px 14px", fontWeight: 600, color: "#111827" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                             <div style={{ width: 30, height: 30, borderRadius: "50%", background: "#0b5d5b", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
-                              {(p.nombre||"")[0]}{(p.apellido||"")[0]}
+                              {(p.nombre || "")[0]}{(p.apellido || "")[0]}
                             </div>
                             {p.nombre} {p.apellido}
                           </div>
@@ -238,15 +248,15 @@ export default function Contratos() {
                         <td style={{ padding: "12px 14px", color: "#6b7280" }}>{p.edad} años</td>
                         <td style={{ padding: "12px 14px" }}>
                           {(p.num_contratos ?? 0) > 0
-                            ? badge("#e6f4f3", "#0b5d5b", `✓ ${p.num_contratos} contrato${p.num_contratos > 1 ? "s" : ""}`)
-                            : badge("#fff7ed", "#d97706", "Sin contrato")}
+                            ? badge("#e6f4f3", "#0b5d5b", `✓ ${p.num_contratos} doc${p.num_contratos > 1 ? "s" : ""}`)
+                            : badge("#fff7ed", "#d97706", "Sin documentos")}
                         </td>
                         <td style={{ padding: "12px 14px", color: "#6b7280", fontSize: 12 }}>
                           {p.fecha_aprobacion ? new Date(p.fecha_aprobacion).toLocaleDateString("es-MX") : "—"}
                         </td>
                         <td style={{ padding: "12px 14px" }}>
                           <span style={{ color: "#0b5d5b", fontWeight: 700, fontSize: 12 }}>
-                            {(p.num_contratos ?? 0) > 0 ? "Ver / Agregar →" : "Subir contrato →"}
+                            {(p.num_contratos ?? 0) > 0 ? "Ver / Agregar →" : "Subir documento →"}
                           </span>
                         </td>
                       </tr>
@@ -261,7 +271,7 @@ export default function Contratos() {
     );
   }
 
-  // ─── VISTA SUBIR ────────────────────────────────────────
+  // ─── VISTA DOCS ────────────────────────────────────────
   return (
     <div className="dashboard">
       {sidebar}
@@ -275,14 +285,14 @@ export default function Contratos() {
               ← Volver
             </button>
             <h3 style={{ margin: 0 }}>
-              Contratos — {pacienteSeleccionado?.nombre} {pacienteSeleccionado?.apellido}
+              Preingreso — {pacienteSeleccionado?.nombre} {pacienteSeleccionado?.apellido}
             </h3>
           </div>
         </div>
 
         <div style={{ padding: "16px 24px", display: "flex", gap: 20 }}>
           {/* Panel izquierdo */}
-          <div style={{ width: 280, flexShrink: 0, display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ width: 290, flexShrink: 0, display: "flex", flexDirection: "column", gap: 14 }}>
 
             {/* Info paciente */}
             <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e5e7eb", padding: 18 }}>
@@ -290,46 +300,44 @@ export default function Contratos() {
               <div style={{ fontWeight: 700, fontSize: 15, color: "#111827", marginBottom: 4 }}>
                 {pacienteSeleccionado?.nombre} {pacienteSeleccionado?.apellido}
               </div>
-              <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 10 }}>{pacienteSeleccionado?.edad} años</div>
+              <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 10 }}>{pacienteSeleccionado?.edad} años · #{pacienteSeleccionado?.id_paciente}</div>
               {(pacienteSeleccionado?.num_contratos ?? 0) > 0
-                ? badge("#e6f4f3", "#0b5d5b", `✓ ${pacienteSeleccionado?.num_contratos} contrato${pacienteSeleccionado?.num_contratos > 1 ? "s" : ""} guardado${pacienteSeleccionado?.num_contratos > 1 ? "s" : ""}`)
-                : badge("#fff7ed", "#d97706", "Sin contratos aún")}
+                ? badge("#e6f4f3", "#0b5d5b", `✓ ${pacienteSeleccionado?.num_contratos} doc${pacienteSeleccionado?.num_contratos > 1 ? "s" : ""} guardado${pacienteSeleccionado?.num_contratos > 1 ? "s" : ""}`)
+                : badge("#fff7ed", "#d97706", "Sin documentos aún")}
             </div>
 
-            {/* Contratos existentes */}
-            {contratosActuales.length > 0 && (
+            {/* Documentos existentes */}
+            {docsActuales.length > 0 && (
               <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e5e7eb", padding: 18 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", marginBottom: 10 }}>Contratos guardados</div>
-                {contratosActuales.map((c, i) => (
-                  <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: i < contratosActuales.length - 1 ? "1px solid #f3f4f6" : "none" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", marginBottom: 10 }}>Documentos guardados</div>
+                {docsActuales.map((d, i) => (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: i < docsActuales.length - 1 ? "1px solid #f3f4f6" : "none" }}>
                     <div>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: "#111827" }}>
-                        {c.tipo === "nicotina" ? "Protocolo Nicotina" : "Contrato No Suicidio"}
-                      </div>
-                      <div style={{ fontSize: 11, color: "#9ca3af" }}>{new Date(c.fecha).toLocaleDateString("es-MX")}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "#111827" }}>{labelTipo(d.tipo)}</div>
+                      <div style={{ fontSize: 11, color: "#9ca3af" }}>{new Date(d.fecha).toLocaleDateString("es-MX")}</div>
                     </div>
-                    {badge("#e6f4f3", "#0b5d5b", "✓ Guardado")}
+                    {badge("#e6f4f3", "#0b5d5b", "✓")}
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Seleccionar tipo */}
+            {/* Seleccionar tipo de documento */}
             <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e5e7eb", padding: 18 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", marginBottom: 10 }}>Nuevo contrato</div>
-              {TIPOS.map(t => (
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", marginBottom: 10 }}>Nuevo documento</div>
+              {TIPOS_DOC.map(t => (
                 <div
                   key={t.key}
                   onClick={() => setSeleccionado(t.key)}
                   style={{
-                    padding: "10px 12px", borderRadius: 8, marginBottom: 8, cursor: "pointer", transition: "all .15s",
+                    padding: "9px 12px", borderRadius: 8, marginBottom: 6, cursor: "pointer", transition: "all .15s",
                     border: `1px solid ${seleccionado === t.key ? "#0b5d5b" : "#e5e7eb"}`,
                     background: seleccionado === t.key ? "#e6f4f3" : "#f9fafb",
                   }}
                 >
-                  <div style={{ fontSize: 13, fontWeight: 600, color: seleccionado === t.key ? "#0b5d5b" : "#111827" }}>{t.label}</div>
-                  <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>{t.desc}</div>
-                  {archivos[t.key] && <span style={{ marginTop: 4, display: "inline-block", fontSize: 10, fontWeight: 700, color: "#0b5d5b" }}>✓ PDF cargado</span>}
+                  <div style={{ fontSize: 12, fontWeight: 600, color: seleccionado === t.key ? "#0b5d5b" : "#111827" }}>{t.label}</div>
+                  <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 1 }}>{t.desc}</div>
+                  {archivos[t.key] && <span style={{ marginTop: 3, display: "inline-block", fontSize: 10, fontWeight: 700, color: "#0b5d5b" }}>✓ PDF cargado</span>}
                 </div>
               ))}
             </div>
@@ -345,14 +353,15 @@ export default function Contratos() {
             {preview ? (
               <iframe src={preview} title="Vista previa" style={{ width: "100%", height: 420, border: "1px solid #e5e7eb", borderRadius: 8 }} />
             ) : (
-              <label style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, border: "2px dashed #e5e7eb", borderRadius: 10, padding: "48px 24px", cursor: "pointer", background: "#f9fafb", transition: "all .15s" }}
+              <label
+                style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, border: "2px dashed #e5e7eb", borderRadius: 10, padding: "48px 24px", cursor: "pointer", background: "#f9fafb", transition: "all .15s" }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = "#0b5d5b"; e.currentTarget.style.background = "#e6f4f3"; }}
                 onMouseLeave={e => { e.currentTarget.style.borderColor = "#e5e7eb"; e.currentTarget.style.background = "#f9fafb"; }}
               >
                 <input type="file" accept="application/pdf" onChange={handleArchivo} hidden />
                 <div style={{ fontSize: 36 }}>📄</div>
                 <div style={{ fontWeight: 600, fontSize: 14, color: "#374151" }}>Haz clic para subir el PDF</div>
-                <div style={{ fontSize: 12, color: "#9ca3af" }}>Solo archivos .pdf</div>
+                <div style={{ fontSize: 12, color: "#9ca3af" }}>Solo archivos .pdf · {tipoActual.label}</div>
               </label>
             )}
 
@@ -364,8 +373,8 @@ export default function Contratos() {
             )}
 
             <label style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: 14, background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 8, cursor: "pointer", fontSize: 13, color: "#374151" }}>
-              <input type="checkbox" checked={firmado} onChange={e => setFirmado(e.target.checked)} style={{ marginTop: 2 }} />
-              Acepto los términos y condiciones del contrato terapéutico y me comprometo a cumplirlos.
+              <input type="checkbox" checked={aceptado} onChange={e => setAceptado(e.target.checked)} style={{ marginTop: 2 }} />
+              Confirmo que el documento ha sido revisado, firmado por el paciente y/o su familiar responsable, y está listo para ser guardado en el expediente.
             </label>
 
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -374,7 +383,7 @@ export default function Contratos() {
                 disabled={guardando || !archivos[seleccionado]}
                 style={{ padding: "10px 28px", background: archivos[seleccionado] ? "#0b5d5b" : "#d1d5db", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: archivos[seleccionado] ? "pointer" : "not-allowed" }}
               >
-                {guardando ? "Guardando..." : "Guardar Contrato"}
+                {guardando ? "Guardando..." : "Guardar Documento"}
               </button>
             </div>
           </div>

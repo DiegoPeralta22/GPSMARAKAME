@@ -1,0 +1,81 @@
+.vi-page { font-family: 'Segoe UI', sans-serif; min-height: 100vh; background: #f9fafb; }
+
+.vi-topbar { display: flex; align-items: center; gap: 20px; padding: 14px 28px; background: #fff; border-bottom: 1px solid #e5e7eb; }
+.vi-back { background: none; border: none; color: #0b5d5b; font-size: 13px; cursor: pointer; font-weight: 600; }
+.vi-topbar-title { font-size: 15px; font-weight: 700; color: #111827; flex: 1; }
+.vi-topbar-links { display: flex; gap: 16px; }
+.vi-topbar-links span { font-size: 13px; color: #0b5d5b; cursor: pointer; font-weight: 500; }
+
+.vi-body { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 24px 28px; max-width: 1100px; }
+
+.vi-expediente-card { background: #fff; border-radius: 10px; border: 1px solid #e5e7eb; padding: 20px; margin-bottom: 14px; }
+.vi-exp-label { font-size: 10px; font-weight: 700; color: #0b5d5b; text-transform: uppercase; letter-spacing: .5px; }
+.vi-exp-nombre { font-size: 26px; font-weight: 800; color: #111827; margin: 4px 0 8px; }
+.vi-exp-meta { display: flex; gap: 12px; align-items: center; font-size: 12px; color: #6b7280; flex-wrap: wrap; }
+.vi-status-badge { background: #e0f2fe; color: #0284c7; font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 20px; }
+.vi-ver-perfil { margin-top: 12px; background: none; border: none; color: #0b5d5b; font-size: 12px; cursor: pointer; font-weight: 600; padding: 0; }
+
+.vi-resumen-cards { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-bottom: 14px; }
+.vi-res-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; text-align: center; display: flex; flex-direction: column; gap: 4px; }
+.vi-res-icon { font-size: 20px; }
+.vi-res-label { font-size: 10px; color: #9ca3af; font-weight: 600; text-transform: uppercase; }
+.vi-res-val { font-size: 14px; font-weight: 700; color: #0b5d5b; }
+
+.vi-etapas-card { background: #fff; border-radius: 10px; border: 1px solid #e5e7eb; padding: 16px; }
+.vi-etapas-card h4 { font-size: 14px; font-weight: 600; color: #111827; margin-bottom: 12px; }
+.vi-etapa { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #f3f4f6; }
+.vi-etapa:last-child { border-bottom: none; }
+.vi-etapa-ico { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+.vi-etapa-ico.ok { background: #0b5d5b; color: #fff; }
+.vi-etapa-ico.pend { background: #e5e7eb; color: #9ca3af; }
+.vi-etapa-label { flex: 1; font-size: 13px; color: #374151; }
+.vi-etapa-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+.vi-etapa-badge.ok { background: #e6f4f3; color: #0b5d5b; }
+.vi-etapa-badge.pend { background: #f3f4f6; color: #9ca3af; }
+
+.vi-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+.vi-info-box { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; }
+.vi-info-label { font-size: 10px; font-weight: 700; color: #9ca3af; text-transform: uppercase; display: block; margin-bottom: 4px; }
+.vi-info-sub { font-size: 12px; color: #374151; display: block; margin-bottom: 6px; }
+.vi-info-chip { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 6px; }
+.vi-chip-med { background: #fef3c7; color: #d97706; }
+.vi-chip-dark { background: #1a1a2e; color: #fff; }
+
+.vi-obs-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; margin-bottom: 14px; }
+.vi-obs-label { font-size: 10px; font-weight: 700; color: #6b7280; text-transform: uppercase; display: block; margin-bottom: 6px; }
+.vi-obs-card p { font-size: 13px; color: #374151; font-style: italic; margin: 0; }
+
+.vi-decision-card { background: #fff; border-radius: 10px; border: 1px solid #e5e7eb; padding: 20px; }
+.vi-decision-card h4 { font-size: 16px; font-weight: 700; color: #111827; margin-bottom: 16px; text-align: center; }
+.vi-decision-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+.vi-dec-btn { padding: 16px; border-radius: 10px; border: 2px solid #e5e7eb; background: #fff; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 6px; transition: all .15s; }
+.vi-dec-btn span { font-size: 24px; }
+.vi-dec-apr.selected { border-color: #0b5d5b; background: #e6f4f3; color: #0b5d5b; }
+.vi-dec-rej.selected { border-color: #ef4444; background: #fff1f2; color: #ef4444; }
+.vi-motivo { margin-bottom: 14px; }
+.vi-motivo label { font-size: 12px; color: #6b7280; font-weight: 500; display: block; margin-bottom: 6px; }
+.vi-motivo textarea { width: 100%; padding: 9px 12px; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 13px; font-family: inherit; min-height: 80px; resize: vertical; outline: none; }
+.vi-btn-guardar { width: 100%; padding: 13px; background: #0b5d5b; color: #fff; border: none; border-radius: 8px; font-size: 15px; font-weight: 700; cursor: pointer; }
+.vi-btn-guardar:hover { background: #094e4c; }
+.vi-decision-final { padding: 16px; border-radius: 8px; font-size: 16px; font-weight: 700; text-align: center; }
+.vi-decision-final.aprobado { background: #e6f4f3; color: #0b5d5b; border: 1px solid #0b5d5b; }
+.vi-decision-final.rechazado { background: #fff1f2; color: #ef4444; border: 1px solid #ef4444; }
+
+/* Lista de pacientes */
+.vi-list-header { padding: 24px 28px 0; }
+.vi-list-header h2 { font-size: 22px; font-weight: 700; color: #111827; margin: 0 0 4px; }
+.vi-list-header p { font-size: 13px; color: #6b7280; }
+.vi-pac-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; padding: 20px 28px; }
+.vi-pac-card { background: #fff; border-radius: 10px; border: 1px solid #e5e7eb; padding: 18px; cursor: pointer; transition: all .15s; }
+.vi-pac-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.08); transform: translateY(-1px); }
+.vi-pac-name { font-size: 15px; font-weight: 700; color: #111827; margin-bottom: 4px; }
+.vi-pac-info { font-size: 12px; color: #6b7280; margin-bottom: 10px; }
+.vi-pac-estado { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.vi-badge { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 10px; }
+.vi-badge-ok { background: #e6f4f3; color: #0b5d5b; }
+.vi-badge-no { background: #fff1f2; color: #ef4444; }
+.vi-badge-pend { background: #f3f4f6; color: #9ca3af; }
+.vi-dec-tag { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 10px; display: inline-block; }
+.vi-dec-tag.apr { background: #e6f4f3; color: #0b5d5b; }
+.vi-dec-tag.rej { background: #fff1f2; color: #ef4444; }
+.vi-empty { grid-column: 1/-1; text-align: center; padding: 40px; color: #9ca3af; }

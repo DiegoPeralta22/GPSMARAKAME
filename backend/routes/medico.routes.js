@@ -47,6 +47,10 @@ router.post('/laboratorio', medico.crearSolicitudLab);
 router.get('/actividades/:id_paciente', medico.obtenerActividades);
 router.post('/actividades', medico.crearActividad);
 
+// Valoración de Ingreso
+router.get('/pendientes-valoracion', medico.obtenerPendientesValoracion);
+router.post('/valorar-ingreso', medico.valorarIngreso);
+
 // Notificaciones
 router.get('/notificaciones/:id_usuario', medico.obtenerNotificaciones);
 router.put('/notificaciones/:id_notificacion/leida', medico.marcarLeida);
