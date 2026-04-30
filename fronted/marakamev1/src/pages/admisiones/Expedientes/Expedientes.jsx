@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import "../Admisiones.css";
+import ExpedienteClinico from "../../expediente/ExpedienteClinico";
 
 const IcoGrid   = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>;
 const IcoHome   = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 21V12h6v9"/></svg>;
@@ -288,19 +289,22 @@ export default function Expedientes() {
     );
   }
 
-  /* ── LOADING ─────────────────────────────────────────── */
-  if (cargando) {
+  /* ── DETAIL: usa ExpedienteClinico compartido ─────────── */
+  if (idPaciente) {
     return (
       <div className="dashboard">
         <Sidebar />
-        <div className="main" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ color: "#9ca3af", fontSize: 14 }}>Cargando expediente...</div>
+        <div className="main" style={{ overflowY: "auto", background: "#f4f6f8", padding: 0 }}>
+          <ExpedienteClinico
+            id_paciente={parseInt(idPaciente)}
+            onVolver={() => navigate("/expedientes")}
+          />
         </div>
       </div>
     );
   }
 
-  /* ── DETAIL DATA ─────────────────────────────────────── */
+  // fallback (never reached but keeps linter happy)
   const pac = datos?.paciente || {};
   const v   = datos?.valoracion;
   const e   = datos?.estudio;

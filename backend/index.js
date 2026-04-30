@@ -653,6 +653,63 @@ app.put("/citas/:id", async (req, res) => {
 });
 
 // =============================================
+// EXPEDIENTE CLÍNICO COMPLETO (todas las áreas)
+// =============================================
+app.get("/expediente-completo/:id_paciente", async (req, res) => {
+    const id = parseInt(req.params.id_paciente);
+    if (isNaN(id)) return res.status(400).send("ID inválido");
+    try {
+        const [paciente, familiar, cuestionarioBase, valoracion, estudio, decision, traslado] = await Promise.all([
+            pool.request().input('id', sql.Int, id).query(`SELECT * FROM Paciente WHERE id_paciente = @id`),
+            pool.request().input('id', sql.Int, id).query(`SELECT TOP 1 * FROM Familiar WHERE id_paciente = @id ORDER BY id_familiar ASC`),
+            pool.request().input('id', sql.Int, id).query(`SELECT TOP 1 id_cuestionario FROM Cuestionario WHERE id_paciente = @id ORDER BY id_cuestionario DESC`),
+            pool.request().input('id', sql.Int, id).query(`SELECT TOP 1 v.*, u.nombre as nombre_medico FROM ValoracionMedica v LEFT JOIN Usuario u ON v.id_usuario = u.id_usuario WHERE v.id_paciente = @id ORDER BY v.fecha_valoracion DESC`),
+            pool.request().input('id', sql.Int, id).query(`SELECT TOP 1 * FROM EstudioSocioeconomico WHERE id_paciente = @id ORDER BY id_estudio DESC`),
+            pool.request().input('id', sql.Int, id).query(`SELECT TOP 1 * FROM DecisionIngreso WHERE id_paciente = @id ORDER BY fecha DESC`),
+            pool.request().input('id', sql.Int, id).query(`SELECT TOP 1 * FROM Traslado WHERE id_paciente = @id ORDER BY fecha DESC`),
+        ]);
+
+        const id_cuestionario = cuestionarioBase.recordset[0]?.id_cuestionario || null;
+        let respuestas = [];
+        if (id_cuestionario) {
+            try {
+                const rRes = await pool.request()
+                    .input('id_c', sql.Int, id_cuestionario)
+                    .query(`SELECT p.texto as pregunta, p.tipo, r.respuesta FROM RespuestaCuestionario r INNER JOIN Pregunta p ON r.id_pregunta = p.id_pregunta WHERE r.id_cuestionario = @id_c AND LTRIM(RTRIM(ISNULL(r.respuesta,''))) <> '' ORDER BY r.id_pregunta`);
+                respuestas = rRes.recordset;
+            } catch (e) { console.error("Error respuestas:", e.message); }
+        }
+
+        let recepcion = null;
+        try {
+            const rRes = await pool.request().input('id', sql.Int, id).query(`SELECT TOP 1 * FROM RecepcionPaciente WHERE id_paciente = @id ORDER BY fecha DESC`);
+            recepcion = rRes.recordset[0] || null;
+        } catch (e) {}
+
+        const citasRes = await pool.request().input('id', sql.Int, id)
+            .query(`SELECT * FROM Cita WHERE id_paciente = @id ORDER BY fecha DESC`);
+
+        const val = valoracion.recordset[0] || null;
+        if (val?.apto !== null && val?.apto !== undefined) val.apto = Number(val.apto);
+
+        res.json({
+            paciente: paciente.recordset[0] || null,
+            familiar: familiar.recordset[0] || null,
+            cuestionario: { id_cuestionario, respuestas },
+            valoracion: val,
+            estudio: estudio.recordset[0] || null,
+            decision: decision.recordset[0] || null,
+            traslado: traslado.recordset[0] || null,
+            recepcion,
+            citas: citasRes.recordset,
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send("Error al obtener expediente completo");
+    }
+});
+
+// =============================================
 // RECEPCIÓN MÉDICA — PRIMERAS 24 HORAS (Pasos 15-19)
 // =============================================
 

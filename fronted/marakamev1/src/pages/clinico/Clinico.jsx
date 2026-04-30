@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import ExpedienteClinico from "../expediente/ExpedienteClinico";
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -91,10 +92,12 @@ const IcoHome = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 const IcoUsers = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
 const IcoBell = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>;
 const IcoTruck = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>;
+const IcoFile = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="12" y2="17"/></svg>;
 
 const NAV_ITEMS = [
   { id: "dashboard", label: "Inicio", Icon: IcoHome },
   { id: "traslado", label: "Traslados", Icon: IcoTruck },
+  { id: "expediente", label: "Expediente", Icon: IcoFile },
 ];
 
 function formatFecha(fecha) {
@@ -113,6 +116,7 @@ export default function Clinico() {
   const [pacientes, setPacientes] = useState([]);
   const [cargando, setCargando] = useState(false);
   const [seleccionado, setSeleccionado] = useState(null);
+  const [pacienteExpediente, setPacienteExpediente] = useState(null);
   const [traslado, setTraslado] = useState(null);
   const [guardando, setGuardando] = useState(false);
 
@@ -335,18 +339,56 @@ export default function Clinico() {
               ) : (
                 <div className="cli-pac-grid">
                   {pacientes.map((p, i) => (
-                    <div key={i} className="cli-pac-card" onClick={() => seleccionarPaciente(p)}>
-                      <div className="cli-pac-name">{p.nombre} {p.apellido}</div>
-                      <div className="cli-pac-info">{p.edad} años · Aprobado {formatFecha(p.fecha_aprobacion)}</div>
-                      {p.id_traslado
-                        ? <span className="cli-badge-done">✓ Traslado completado</span>
-                        : <span className="cli-badge-pend">Pendiente de traslado</span>
-                      }
+                    <div key={i} className="cli-pac-card">
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                        <div onClick={() => seleccionarPaciente(p)} style={{ flex: 1 }}>
+                          <div className="cli-pac-name">{p.nombre} {p.apellido}</div>
+                          <div className="cli-pac-info">{p.edad} años · Aprobado {formatFecha(p.fecha_aprobacion)}</div>
+                          {p.id_traslado
+                            ? <span className="cli-badge-done">✓ Traslado completado</span>
+                            : <span className="cli-badge-pend">Pendiente de traslado</span>
+                          }
+                        </div>
+                        <button
+                          onClick={() => { setPacienteExpediente(p); setSeccion("expediente"); }}
+                          style={{ background: "none", border: "1px solid #e5e7eb", borderRadius: 6, padding: "4px 10px", fontSize: 11, color: "#6b7280", cursor: "pointer", whiteSpace: "nowrap", marginLeft: 8, marginTop: 2 }}
+                        >
+                          Ver exp.
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
               )}
             </>
+          )}
+
+          {/* EXPEDIENTE */}
+          {seccion === "expediente" && !pacienteExpediente && (
+            <>
+              <h1 className="cli-page-title">Expediente Clínico</h1>
+              <p className="cli-page-subtitle">Selecciona un paciente para ver su expediente completo</p>
+              {pacientes.length === 0 ? (
+                <div className="cli-empty">No hay pacientes registrados</div>
+              ) : (
+                <div className="cli-pac-grid">
+                  {pacientes.map((p, i) => (
+                    <div key={i} className="cli-pac-card" onClick={() => setPacienteExpediente(p)}>
+                      <div className="cli-pac-name">{p.nombre} {p.apellido}</div>
+                      <div className="cli-pac-info">{p.edad} años</div>
+                      <span className="cli-badge-done" style={{ background: "#eff6ff", color: "#2563eb" }}>Ver Expediente →</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {seccion === "expediente" && pacienteExpediente && (
+            <ExpedienteClinico
+              id_paciente={pacienteExpediente.id_paciente}
+              onVolver={() => setPacienteExpediente(null)}
+            />
           )}
 
           {/* TRASLADOS - FORMULARIO */}

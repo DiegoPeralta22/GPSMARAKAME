@@ -252,12 +252,18 @@ export default function EstudioSocioeconomico() {
           </div>
         </div>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         {savedMsg && (
           <span style={{ fontSize: 12, color: "#0b5d5b", fontWeight: 600, background: "#e6f4f3", padding: "4px 12px", borderRadius: 8 }}>
             ✓ Guardado
           </span>
         )}
+        <button
+          onClick={() => window.print()}
+          style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 12, fontWeight: 600, color: "#374151", cursor: "pointer" }}
+        >
+          🖨️ Imprimir / PDF
+        </button>
         <button className="est-btn-borrador" onClick={() => guardar("borrador")} disabled={guardando}>
           💾 GUARDAR BORRADOR
         </button>
