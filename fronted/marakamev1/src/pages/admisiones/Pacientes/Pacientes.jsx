@@ -61,16 +61,18 @@ export default function Pacientes() {
       const q = busqueda.trim().toLowerCase();
       if (!nombre.includes(q) && !idStr.includes(q) && !fechaStr.includes(q)) return false;
     }
-    if (filtro === "pendientes")  return !p.decision;
-    if (filtro === "aprobados")   return p.decision === "aprobado";
-    if (filtro === "rechazados")  return p.decision === "rechazado";
+    if (filtro === "admisiones")   return !p.decision || p.decision === "requiere_valoracion";
+    if (filtro === "medico")       return p.apto === 1 && p.decision !== "aprobado" && p.decision !== "rechazado";
+    if (filtro === "tratamiento")  return p.decision === "aprobado";
+    if (filtro === "rechazados")   return p.decision === "rechazado" || p.apto === 0;
     return true;
   });
 
   const conteo = (f) => pacientes.filter(p =>
-    f === "pendientes" ? !p.decision :
-    f === "aprobados"  ? p.decision === "aprobado" :
-    p.decision === "rechazado"
+    f === "admisiones"  ? (!p.decision || p.decision === "requiere_valoracion") :
+    f === "medico"      ? (p.apto === 1 && p.decision !== "aprobado" && p.decision !== "rechazado") :
+    f === "tratamiento" ? p.decision === "aprobado" :
+    p.decision === "rechazado" || p.apto === 0
   ).length;
 
   return (
@@ -112,20 +114,28 @@ export default function Pacientes() {
           </div>
         </div>
 
-        {/* Filtros */}
-        <div style={{ padding: "16px 24px 0", display: "flex", gap: 8 }}>
-          {[["todos","Todos"], ["pendientes","Pendientes"], ["aprobados","Aprobados"], ["rechazados","Rechazados"]].map(([val, label]) => (
+        {/* Filtros por área */}
+        <div style={{ padding: "16px 24px 0", display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {[
+            ["todos",       "Todos",          "#6b7280"],
+            ["admisiones",  "Admisiones",     "#0b5d5b"],
+            ["medico",      "Médico",         "#2563eb"],
+            ["tratamiento", "En Tratamiento", "#16a34a"],
+            ["rechazados",  "Rechazados",     "#ef4444"],
+          ].map(([val, label, dot]) => (
             <button
               key={val}
               onClick={() => setFiltro(val)}
               style={{
                 padding: "6px 16px", borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: "pointer",
-                background: filtro === val ? "#0b5d5b" : "#fff",
+                background: filtro === val ? dot : "#fff",
                 color: filtro === val ? "#fff" : "#374151",
-                border: `1px solid ${filtro === val ? "#0b5d5b" : "#e5e7eb"}`,
+                border: `1px solid ${filtro === val ? dot : "#e5e7eb"}`,
+                display: "flex", alignItems: "center", gap: 6,
               }}
             >
-              {label}{val !== "todos" ? ` (${conteo(val)})` : ""}
+              {filtro !== val && <span style={{ width: 8, height: 8, borderRadius: "50%", background: dot, display: "inline-block" }} />}
+              {label}{val !== "todos" ? ` (${conteo(val)})` : ` (${pacientes.length})`}
             </button>
           ))}
         </div>

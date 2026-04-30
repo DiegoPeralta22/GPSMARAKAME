@@ -283,6 +283,33 @@ export default function ExpedienteClinico({ id_paciente, onVolver }) {
               </div>
             )}
 
+            {/* Estudio Socioeconómico */}
+            {estudio && (
+              <div className="ec-section">
+                <div className="ec-section-header adm">
+                  <span className="ec-section-icon">💰</span>
+                  <span className="ec-section-title adm">Estudio Socioeconómico</span>
+                </div>
+                <div className="ec-section-body">
+                  <div className="ec-grid-4">
+                    <div><div className="ec-field-lbl">Folio</div><div className="ec-field-val">{estudio.folio || "—"}</div></div>
+                    <div><div className="ec-field-lbl">Estado</div><div className="ec-field-val">{estudio.status || "—"}</div></div>
+                    <div><div className="ec-field-lbl">Ingreso Mensual</div><div className="ec-field-val">{estudio.ingreso_mensual ? `$${Number(estudio.ingreso_mensual).toLocaleString()}` : "—"}</div></div>
+                    <div><div className="ec-field-lbl">Egreso Mensual</div><div className="ec-field-val">{estudio.egreso_mensual ? `$${Number(estudio.egreso_mensual).toLocaleString()}` : "—"}</div></div>
+                    <div><div className="ec-field-lbl">Tipo de Vivienda</div><div className="ec-field-val">{estudio.tipo_vivienda || "—"}</div></div>
+                    <div><div className="ec-field-lbl">Nivel Económico</div><div className="ec-field-val">{estudio.nivel_economico || "—"}</div></div>
+                  </div>
+                  {estudio.observaciones && (
+                    <>
+                      <hr className="ec-divider" />
+                      <div className="ec-field-lbl">Observaciones del Trabajador Social</div>
+                      <div className="ec-val-box" style={{ marginTop: 6 }}>{estudio.observaciones}</div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Decisión de Ingreso */}
             {dec && (
               <div className="ec-section">
@@ -369,33 +396,6 @@ export default function ExpedienteClinico({ id_paciente, onVolver }) {
                 ) : <div className="ec-empty">Sin valoración de ingreso registrada</div>}
               </div>
             </div>
-
-            {/* Estudio Socioeconómico */}
-            {estudio && (
-              <div className="ec-section">
-                <div className="ec-section-header med">
-                  <span className="ec-section-icon">💰</span>
-                  <span className="ec-section-title med">Estudio Socioeconómico</span>
-                </div>
-                <div className="ec-section-body">
-                  <div className="ec-grid-4">
-                    <div><div className="ec-field-lbl">Folio</div><div className="ec-field-val">{estudio.folio || "—"}</div></div>
-                    <div><div className="ec-field-lbl">Estado</div><div className="ec-field-val">{estudio.status || "—"}</div></div>
-                    <div><div className="ec-field-lbl">Ingreso Mensual</div><div className="ec-field-val">{estudio.ingreso_mensual ? `$${Number(estudio.ingreso_mensual).toLocaleString()}` : "—"}</div></div>
-                    <div><div className="ec-field-lbl">Egreso Mensual</div><div className="ec-field-val">{estudio.egreso_mensual ? `$${Number(estudio.egreso_mensual).toLocaleString()}` : "—"}</div></div>
-                    <div><div className="ec-field-lbl">Tipo de Vivienda</div><div className="ec-field-val">{estudio.tipo_vivienda || "—"}</div></div>
-                    <div><div className="ec-field-lbl">Nivel Económico</div><div className="ec-field-val">{estudio.nivel_economico || "—"}</div></div>
-                  </div>
-                  {estudio.observaciones && (
-                    <>
-                      <hr className="ec-divider" />
-                      <div className="ec-field-lbl">Observaciones del Trabajador Social</div>
-                      <div className="ec-val-box" style={{ marginTop: 6 }}>{estudio.observaciones}</div>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
 
             {/* Recepción Primeras 24h */}
             {recepcion && (

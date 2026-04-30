@@ -97,6 +97,169 @@ export default function Expedientes() {
   const [editNotas,     setEditNotas]     = useState("");
   const [guardandoEdit, setGuardandoEdit] = useState(false);
 
+  /* Word export */
+  const [generandoWord, setGenerandoWord] = useState(false);
+
+  const descargarCuestionarioWord = async () => {
+    setGenerandoWord(true);
+    try {
+      const res  = await fetch(`http://localhost:3000/expediente-completo/${idPaciente}`);
+      const data = await res.json();
+      const p    = data.paciente || {};
+      const fam  = data.familiar;
+      const resp = data.cuestionario?.respuestas || [];
+
+      const SECCIONES = {
+        seguimiento: "SECCIÓN 1 — ATENCIÓN Y SEGUIMIENTO",
+        solicitante: "SECCIÓN 2 — DATOS DEL SOLICITANTE",
+        paciente:    "SECCIÓN 3 — INFORMACIÓN DEL PACIENTE",
+        valoracion:  "SECCIÓN 4 — VALORACIÓN INICIAL",
+        estatus:     "SECCIÓN 5 — ESTATUS Y PROGRAMACIÓN",
+      };
+
+      const byTipo = {};
+      resp.forEach(r => {
+        const t = r.tipo || "otro";
+        if (!byTipo[t]) byTipo[t] = [];
+        byTipo[t].push(r);
+      });
+
+      const qaHTML = Object.entries(SECCIONES).map(([tipo, titulo]) => {
+        const items = byTipo[tipo];
+        if (!items?.length) return "";
+        return `
+          <div class="sec-title">${titulo}</div>
+          ${items.map(r => `
+            <div class="qa-item">
+              <div class="qa-q">${r.pregunta || ""}</div>
+              <div class="qa-a">${r.respuesta || "—"}</div>
+            </div>
+          `).join("")}
+        `;
+      }).join("");
+
+      const folio = `MK-${new Date().getFullYear()}-${String(p.id_paciente || 0).padStart(4, "0")}`;
+      const hoy   = new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
+
+      const html = `
+<html xmlns:o='urn:schemas-microsoft-com:office:office'
+      xmlns:w='urn:schemas-microsoft-com:office:word'
+      xmlns='http://www.w3.org/TR/REC-html40'>
+<head>
+<meta charset='utf-8'>
+<title>Cuestionario de Admisión - ${p.nombre} ${p.apellido}</title>
+<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>90</w:Zoom></w:WordDocument></xml><![endif]-->
+<style>
+  @page { size: letter; margin: 2.5cm 3cm; }
+  body { font-family: Arial, sans-serif; font-size: 10pt; color: #1a1a1a; line-height: 1.5; }
+  .header { border-bottom: 3pt solid #0b5d5b; padding-bottom: 12pt; margin-bottom: 16pt; display: flex; align-items: center; justify-content: space-between; }
+  .logo-block {}
+  .logo { font-size: 20pt; font-weight: 900; color: #0b5d5b; letter-spacing: 1px; margin: 0; }
+  .logo-sub { font-size: 8pt; color: #6b7280; text-transform: uppercase; letter-spacing: 1.5px; margin: 0; }
+  .doc-meta { text-align: right; font-size: 9pt; color: #6b7280; }
+  .doc-title { font-size: 14pt; font-weight: 800; color: #111; text-align: center; margin: 14pt 0 4pt; }
+  .doc-folio { text-align: center; font-size: 9pt; color: #6b7280; margin-bottom: 16pt; }
+  .pac-box { background: #f0faf9; border: 1.5pt solid #0b5d5b; border-radius: 4pt; padding: 12pt 16pt; margin-bottom: 18pt; }
+  .pac-name { font-size: 13pt; font-weight: 800; color: #0b5d5b; margin: 0 0 8pt; }
+  .pac-row { display: flex; gap: 20pt; flex-wrap: wrap; }
+  .pac-field { min-width: 100pt; }
+  .pac-field label { font-size: 7.5pt; color: #6b7280; text-transform: uppercase; font-weight: 700; display: block; margin-bottom: 1pt; letter-spacing: 0.5px; }
+  .pac-field span { font-size: 10pt; font-weight: 600; color: #111; }
+  .sec-title { font-size: 10pt; font-weight: 800; color: #fff; background: #0b5d5b; padding: 5pt 10pt; margin: 18pt 0 10pt; letter-spacing: 0.5px; }
+  .qa-item { margin-bottom: 8pt; padding-bottom: 8pt; border-bottom: 0.5pt solid #e5e7eb; }
+  .qa-q { font-size: 8pt; color: #6b7280; font-weight: 600; margin-bottom: 2pt; text-transform: uppercase; letter-spacing: 0.3px; }
+  .qa-a { font-size: 10pt; color: #111; font-weight: 500; }
+  .fam-box { background: #fff7ed; border: 1pt solid #d97706; border-radius: 4pt; padding: 10pt 14pt; margin: 14pt 0; }
+  .fam-title { font-size: 9pt; font-weight: 700; color: #d97706; text-transform: uppercase; margin: 0 0 6pt; }
+  .firmas { display: flex; justify-content: space-around; margin-top: 40pt; }
+  .firma-box { text-align: center; width: 160pt; }
+  .firma-line { border-top: 1pt solid #111; padding-top: 6pt; font-size: 9pt; font-weight: 600; }
+  .firma-cargo { font-size: 8pt; color: #6b7280; }
+  .page-footer { margin-top: 24pt; border-top: 0.5pt solid #e5e7eb; padding-top: 8pt; font-size: 8pt; color: #9ca3af; text-align: center; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo-block">
+    <p class="logo">MARAKAME</p>
+    <p class="logo-sub">Instituto de Rehabilitación</p>
+  </div>
+  <div class="doc-meta">
+    <div>Fecha de impresión: ${hoy}</div>
+    <div>Impreso por: ${usuario?.nombre || "—"}</div>
+  </div>
+</div>
+
+<div class="doc-title">CUESTIONARIO DE ADMISIÓN</div>
+<div class="doc-folio">Folio: ${folio} &nbsp;|&nbsp; Fecha de registro: ${new Date(p.fecha_registro || Date.now()).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}</div>
+
+<div class="pac-box">
+  <p class="pac-name">${p.nombre || ""} ${p.apellido || ""}</p>
+  <div class="pac-row">
+    <div class="pac-field"><label>Edad</label><span>${p.edad ? p.edad + " años" : "—"}</span></div>
+    <div class="pac-field"><label>Género</label><span>${p.genero || "—"}</span></div>
+    <div class="pac-field"><label>Estado Civil</label><span>${p.estado_civil || "—"}</span></div>
+    <div class="pac-field"><label>Escolaridad</label><span>${p.escolaridad || "—"}</span></div>
+    <div class="pac-field"><label>Ocupación</label><span>${p.ocupacion || "—"}</span></div>
+    <div class="pac-field"><label>Teléfono</label><span>${p.telefono || "—"}</span></div>
+  </div>
+  ${p.direccion ? `<div style="margin-top:8pt"><label style="font-size:7.5pt;color:#6b7280;text-transform:uppercase;font-weight:700">Dirección</label><div style="font-size:10pt;font-weight:500">${p.direccion}</div></div>` : ""}
+</div>
+
+${fam ? `
+<div class="fam-box">
+  <p class="fam-title">Familiar / Responsable</p>
+  <div class="pac-row">
+    <div class="pac-field"><label>Nombre</label><span>${fam.nombre || "—"}</span></div>
+    <div class="pac-field"><label>Parentesco</label><span>${fam.parentesco || "—"}</span></div>
+    <div class="pac-field"><label>Teléfono</label><span>${fam.telefono || "—"}</span></div>
+    ${fam.direccion ? `<div class="pac-field"><label>Dirección</label><span>${fam.direccion}</span></div>` : ""}
+  </div>
+</div>
+` : ""}
+
+${qaHTML}
+
+<div class="firmas">
+  <div class="firma-box">
+    <div class="firma-line">${p.nombre || ""} ${p.apellido || ""}</div>
+    <div class="firma-cargo">Paciente / Representante</div>
+  </div>
+  <div class="firma-box">
+    <div class="firma-line">&nbsp;</div>
+    <div class="firma-cargo">Personal de Admisiones</div>
+  </div>
+  <div class="firma-box">
+    <div class="firma-line">&nbsp;</div>
+    <div class="firma-cargo">Director / Responsable</div>
+  </div>
+</div>
+
+<div class="page-footer">
+  Instituto MARAKAME de Rehabilitación &nbsp;|&nbsp; Documento generado el ${hoy} &nbsp;|&nbsp; ${folio}
+</div>
+
+</body>
+</html>`;
+
+      const blob = new Blob(["﻿", html], { type: "application/msword" });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href     = url;
+      a.download = `Cuestionario_${p.nombre}_${p.apellido}_${folio}.doc`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+      alert("Error al generar el documento Word");
+    } finally {
+      setGenerandoWord(false);
+    }
+  };
+
   useEffect(() => {
     if (idPaciente) {
       cargarDetalle(idPaciente);
@@ -289,22 +452,6 @@ export default function Expedientes() {
     );
   }
 
-  /* ── DETAIL: usa ExpedienteClinico compartido ─────────── */
-  if (idPaciente) {
-    return (
-      <div className="dashboard">
-        <Sidebar />
-        <div className="main" style={{ overflowY: "auto", background: "#f4f6f8", padding: 0 }}>
-          <ExpedienteClinico
-            id_paciente={parseInt(idPaciente)}
-            onVolver={() => navigate("/expedientes")}
-          />
-        </div>
-      </div>
-    );
-  }
-
-  // fallback (never reached but keeps linter happy)
   const pac = datos?.paciente || {};
   const v   = datos?.valoracion;
   const e   = datos?.estudio;
@@ -534,7 +681,18 @@ export default function Expedientes() {
         {tab === "documentos" && (
           <div style={{ padding: 20 }}>
             <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e5e7eb", padding: 24 }}>
-              <h4 style={{ margin: "0 0 18px", color: "#111827", fontSize: 15 }}>Documentos del Paciente</h4>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+                <h4 style={{ margin: 0, color: "#111827", fontSize: 15 }}>Documentos del Paciente</h4>
+                {c && (
+                  <button
+                    onClick={descargarCuestionarioWord}
+                    disabled={generandoWord}
+                    style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 18px", background: generandoWord ? "#9ca3af" : "#2563eb", border: "none", borderRadius: 8, color: "#fff", fontSize: 13, fontWeight: 600, cursor: generandoWord ? "default" : "pointer" }}
+                  >
+                    📄 {generandoWord ? "Generando..." : "Descargar Cuestionario Word"}
+                  </button>
+                )}
+              </div>
               {documentos.map((doc, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 16, padding: "14px 0", borderBottom: i < documentos.length - 1 ? "1px solid #f3f4f6" : "none" }}>
                   <span style={{ fontSize: 26 }}>{doc.icon}</span>
@@ -547,9 +705,15 @@ export default function Expedientes() {
                       <button onClick={() => navigate(doc.verUrl)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 16px", background: "#fff", border: "1px solid #0b5d5b", borderRadius: 8, color: "#0b5d5b", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
                         <IcoEye /> Ver
                       </button>
-                      <button onClick={() => { navigate(doc.verUrl); setTimeout(() => window.print(), 1000); }} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 16px", background: "#0b5d5b", border: "none", borderRadius: 8, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-                        <IcoDl /> Descargar
-                      </button>
+                      {doc.nombre === "Cuestionario de Admisión" ? (
+                        <button onClick={descargarCuestionarioWord} disabled={generandoWord} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 16px", background: generandoWord ? "#9ca3af" : "#2563eb", border: "none", borderRadius: 8, color: "#fff", fontSize: 13, fontWeight: 600, cursor: generandoWord ? "default" : "pointer" }}>
+                          📄 Word
+                        </button>
+                      ) : (
+                        <button onClick={() => { navigate(doc.verUrl); setTimeout(() => window.print(), 1000); }} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 16px", background: "#0b5d5b", border: "none", borderRadius: 8, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                          <IcoDl /> Descargar
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <span style={{ fontSize: 12, color: "#9ca3af", fontStyle: "italic" }}>No disponible</span>
