@@ -25,7 +25,27 @@ const config = {
 let pool;
 
 sql.connect(config)
-    .then(p => { pool = p; console.log("Conectado a SQL Server 🔥"); })
+    .then(p => {
+        pool = p;
+        console.log("Conectado a SQL Server 🔥");
+        pool.request().query(`
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='RecepcionPaciente' AND xtype='U')
+            CREATE TABLE RecepcionPaciente (
+                id_recepcion INT PRIMARY KEY IDENTITY,
+                id_paciente INT NOT NULL,
+                id_usuario INT,
+                fecha DATETIME DEFAULT GETDATE(),
+                signos_vitales NVARCHAR(MAX),
+                es_estable BIT,
+                habitacion NVARCHAR(100),
+                valoracion_psiquiatrica NVARCHAR(MAX),
+                valoracion_nutricional NVARCHAR(MAX),
+                valoracion_salud NVARCHAR(MAX),
+                plan_tratamiento NVARCHAR(MAX),
+                observaciones NVARCHAR(500)
+            )
+        `).catch(e => console.error("Error creando RecepcionPaciente:", e));
+    })
     .catch(err => console.log(err));
 
 app.get('/', (req, res) => res.send('Backend funcionando'));
@@ -481,6 +501,22 @@ app.post("/clinico/traslado", async (req, res) => {
                 await pool.request().input('id_paciente', id_paciente)
                     .query(`UPDATE Expediente SET estado = 'internado', fecha_ingreso = GETDATE() WHERE id_paciente = @id_paciente`);
             } catch (e) { console.error("Error actualizando expediente:", e); }
+
+            // Paso 14→15: notificar a médicos que paciente está listo para recepción
+            try {
+                const pacRes = await pool.request().input('id', id_paciente)
+                    .query(`SELECT nombre, apellido FROM Paciente WHERE id_paciente = @id`);
+                const pac = pacRes.recordset[0];
+                const nombre = pac ? `${pac.nombre} ${pac.apellido}` : `Paciente #${id_paciente}`;
+                const medicos = await pool.request().query(`SELECT id_usuario FROM Usuario WHERE id_rol = 4`);
+                for (const m of medicos.recordset) {
+                    await pool.request()
+                        .input('dest', m.id_usuario)
+                        .input('ref', id_paciente)
+                        .input('msg', `Traslado completado para ${nombre}. El paciente está listo para recepción médica (primeras 24 hrs).`)
+                        .query(`INSERT INTO Notificacion (id_usuario_destino, tipo, mensaje, id_referencia, tabla_referencia) VALUES (@dest, 'traslado_completado', @msg, @ref, 'Paciente')`);
+                }
+            } catch (e) { console.error("Error notificando médico post-traslado:", e); }
         }
 
         res.json({ id_traslado });
@@ -588,10 +624,118 @@ app.put("/citas/:id", async (req, res) => {
                   fecha  = ISNULL(@fecha,  fecha)
                 WHERE id_cita = @id
             `);
+
+        // Paso 3: cuando paciente asiste a cita, notificar a médicos y clínicos
+        if (estado === 'asistio') {
+            try {
+                const citaRes = await pool.request().input('id', sql.Int, parseInt(req.params.id))
+                    .query(`SELECT c.id_paciente, p.nombre, p.apellido FROM Cita c INNER JOIN Paciente p ON c.id_paciente = p.id_paciente WHERE c.id_cita = @id`);
+                const cita = citaRes.recordset[0];
+                if (cita) {
+                    const nombre = `${cita.nombre} ${cita.apellido}`;
+                    const destinatarios = await pool.request().query(`SELECT id_usuario FROM Usuario WHERE id_rol IN (4, 5)`);
+                    for (const u of destinatarios.recordset) {
+                        await pool.request()
+                            .input('dest', u.id_usuario)
+                            .input('ref', cita.id_paciente)
+                            .input('msg', `Paciente ${nombre} acudió a la cita programada. Estar al pendiente para valoración.`)
+                            .query(`INSERT INTO Notificacion (id_usuario_destino, tipo, mensaje, id_referencia, tabla_referencia) VALUES (@dest, 'paciente_citado', @msg, @ref, 'Paciente')`);
+                    }
+                }
+            } catch (e) { console.error("Error notificando cita asistida:", e); }
+        }
+
         res.send("ok");
     } catch (err) {
         console.error(err);
         res.status(500).send("Error al actualizar cita");
+    }
+});
+
+// =============================================
+// RECEPCIÓN MÉDICA — PRIMERAS 24 HORAS (Pasos 15-19)
+// =============================================
+
+// Pacientes con traslado completado pendientes de recepción
+app.get("/medico/pendientes-recepcion", async (req, res) => {
+    try {
+        const result = await pool.request().query(`
+            SELECT p.id_paciente, p.nombre, p.apellido, p.edad,
+                   t.fecha as fecha_traslado, t.id_traslado,
+                   r.id_recepcion
+            FROM Traslado t
+            INNER JOIN Paciente p ON t.id_paciente = p.id_paciente
+            LEFT JOIN RecepcionPaciente r ON t.id_paciente = r.id_paciente
+            ORDER BY t.fecha DESC
+        `);
+        res.json(result.recordset);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send("Error al obtener pendientes de recepción");
+    }
+});
+
+// Guardar recepción médica del paciente
+app.post("/medico/recepcion", async (req, res) => {
+    const { id_paciente, id_usuario, signos_vitales, es_estable, habitacion, valoracion_psiquiatrica, valoracion_nutricional, valoracion_salud, plan_tratamiento, observaciones } = req.body;
+    try {
+        const existing = await pool.request()
+            .input('id_paciente', id_paciente)
+            .query('SELECT id_recepcion FROM RecepcionPaciente WHERE id_paciente = @id_paciente');
+
+        let id_recepcion;
+        if (existing.recordset.length > 0) {
+            id_recepcion = existing.recordset[0].id_recepcion;
+            await pool.request()
+                .input('id', id_recepcion)
+                .input('id_usuario', id_usuario || null)
+                .input('signos', signos_vitales || null)
+                .input('estable', es_estable !== null && es_estable !== undefined ? (es_estable ? 1 : 0) : null)
+                .input('hab', habitacion || null)
+                .input('psiq', valoracion_psiquiatrica || null)
+                .input('nutr', valoracion_nutricional || null)
+                .input('salud', valoracion_salud || null)
+                .input('plan', plan_tratamiento || null)
+                .input('obs', observaciones || null)
+                .query(`UPDATE RecepcionPaciente SET id_usuario=@id_usuario, signos_vitales=@signos, es_estable=@estable, habitacion=@hab, valoracion_psiquiatrica=@psiq, valoracion_nutricional=@nutr, valoracion_salud=@salud, plan_tratamiento=@plan, observaciones=@obs WHERE id_recepcion=@id`);
+        } else {
+            const result = await pool.request()
+                .input('id_paciente', id_paciente)
+                .input('id_usuario', id_usuario || null)
+                .input('signos', signos_vitales || null)
+                .input('estable', es_estable !== null && es_estable !== undefined ? (es_estable ? 1 : 0) : null)
+                .input('hab', habitacion || null)
+                .input('psiq', valoracion_psiquiatrica || null)
+                .input('nutr', valoracion_nutricional || null)
+                .input('salud', valoracion_salud || null)
+                .input('plan', plan_tratamiento || null)
+                .input('obs', observaciones || null)
+                .query(`INSERT INTO RecepcionPaciente (id_paciente, id_usuario, signos_vitales, es_estable, habitacion, valoracion_psiquiatrica, valoracion_nutricional, valoracion_salud, plan_tratamiento, observaciones) OUTPUT INSERTED.id_recepcion VALUES (@id_paciente, @id_usuario, @signos, @estable, @hab, @psiq, @nutr, @salud, @plan, @obs)`);
+            id_recepcion = result.recordset[0].id_recepcion;
+
+            // Actualizar expediente
+            try {
+                await pool.request().input('id', id_paciente)
+                    .query(`UPDATE Expediente SET estado = 'en_tratamiento' WHERE id_paciente = @id`);
+            } catch (e) { console.error("Error actualizando expediente recepcion:", e); }
+        }
+
+        res.json({ id_recepcion });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send("Error al guardar recepción");
+    }
+});
+
+// Obtener recepción de un paciente
+app.get("/medico/recepcion/:id_paciente", async (req, res) => {
+    try {
+        const result = await pool.request()
+            .input('id', req.params.id_paciente)
+            .query('SELECT * FROM RecepcionPaciente WHERE id_paciente = @id ORDER BY fecha DESC');
+        res.json(result.recordset[0] || null);
+    } catch (err) {
+        res.status(500).send("Error al obtener recepción");
     }
 });
 

@@ -11,6 +11,7 @@ import Pacientes from "./Pacientes";
 import Expediente from "./Expediente";
 import Valoracion from "./Valoracion";
 import ValoracionIngreso from "./ValoracionIngreso";
+import RecepcionPaciente from "./RecepcionPaciente";
 import Desintoxicacion from "./Desintoxicacion";
 import Indicaciones from "./Indicaciones";
 import Laboratorio from "./Laboratorio";
@@ -109,11 +110,12 @@ const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: "chart" },
   { id: "pacientes", label: "Pacientes", icon: "users" },
   { id: "val-ingreso", label: "Val. de Ingreso", icon: "bell" },
-  { id: "valoracion", label: "Valoración", icon: "heart" },
+  { id: "recepcion", label: "Recepción 24h", icon: "heart" },
+  { id: "valoracion", label: "Valoración", icon: "activity" },
   { id: "diagnostico", label: "Diagnóstico", icon: "file" },
   { id: "indicaciones", label: "Indicaciones", icon: "pill" },
   { id: "desintoxicacion", label: "Desintoxicación", icon: "drop" },
-  { id: "evolucion", label: "Evolución", icon: "activity" },
+  { id: "evolucion", label: "Evolución", icon: "chart" },
   { id: "laboratorio", label: "Laboratorio", icon: "flask" },
   { id: "actividades", label: "Actividades", icon: "calendar" },
 ];
@@ -131,7 +133,7 @@ const ICONS = {
   bell: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
 };
 
-const SECCIONES_LISTAS = ["dashboard", "pacientes", "expediente", "val-ingreso", "valoracion", "desintoxicacion", "indicaciones", "laboratorio"];
+const SECCIONES_LISTAS = ["dashboard", "pacientes", "expediente", "val-ingreso", "recepcion", "valoracion", "desintoxicacion", "indicaciones", "laboratorio"];
 
 function getNotifIconClass(tipo) {
   if (!tipo) return "info";
@@ -278,6 +280,7 @@ export default function Medico() {
           <span>
             {seccionActiva === "expediente" ? "Expediente" :
              seccionActiva === "val-ingreso" ? "Valoración de Ingreso" :
+             seccionActiva === "recepcion" ? "Recepción Médica — Primeras 24 Horas" :
              seccionActiva === "valoracion" ? "Valoración Médica" :
              seccionActiva === "desintoxicacion" ? "Protocolo de Desintoxicación" :
              seccionActiva === "indicaciones" ? "Indicaciones Médicas" :
@@ -456,6 +459,11 @@ export default function Medico() {
           {/* VALORACIÓN DE INGRESO */}
           {seccionActiva === "val-ingreso" && (
             <ValoracionIngreso />
+          )}
+
+          {/* RECEPCIÓN MÉDICA 24H */}
+          {seccionActiva === "recepcion" && (
+            <RecepcionPaciente usuario={usuario} />
           )}
 
           {/* VALORACIÓN */}

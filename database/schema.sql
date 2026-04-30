@@ -433,3 +433,21 @@ CREATE TABLE Traslado (
     inventario_json         NVARCHAR(MAX),   -- JSON con lista de pertenencias
     observaciones           NVARCHAR(MAX)
 );
+
+-- =============================================
+-- RECEPCIÓN MÉDICA — PRIMERAS 24 HORAS (Pasos 15-19)
+-- =============================================
+CREATE TABLE RecepcionPaciente (
+    id_recepcion            INT IDENTITY PRIMARY KEY,
+    id_paciente             INT NOT NULL FOREIGN KEY REFERENCES Paciente(id_paciente),
+    id_usuario              INT FOREIGN KEY REFERENCES Usuario(id_usuario),
+    fecha                   DATETIME DEFAULT GETDATE(),
+    signos_vitales          NVARCHAR(MAX),    -- JSON: pa_sistolica, pa_diastolica, fc, fr, temp, peso, talla
+    es_estable              BIT,
+    habitacion              NVARCHAR(100),
+    valoracion_psiquiatrica NVARCHAR(MAX),
+    valoracion_nutricional  NVARCHAR(MAX),
+    valoracion_salud        NVARCHAR(MAX),
+    plan_tratamiento        NVARCHAR(MAX),
+    observaciones           NVARCHAR(500)
+);
