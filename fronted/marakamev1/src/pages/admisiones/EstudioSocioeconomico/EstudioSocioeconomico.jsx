@@ -691,6 +691,7 @@ export default function EstudioSocioeconomico() {
             <li onClick={() => navigate("/preingreso")}><IcoDoc />Preingreso</li>
             <li onClick={() => navigate("/expedientes")}><IcoFolder />Expedientes</li>
           </ul>
+          <button className="adm-btn" onClick={() => navigate("/registro")}>+ Registro de Paciente</button>
         </div>
         <div className="main">
           <div className="header">
@@ -803,9 +804,10 @@ export default function EstudioSocioeconomico() {
           <li className="active"><IcoMoney />Estudio Socioeconómico</li>
           <li onClick={() => navigate("/citas")}><IcoCal />Agenda de Citas</li>
           <li onClick={() => navigate("/validacion")}><IcoShield />Validación de Ingreso</li>
-          <li onClick={() => navigate("/contratos")}><IcoDoc />Contratos</li>
+          <li onClick={() => navigate("/preingreso")}><IcoDoc />Preingreso</li>
           <li onClick={() => navigate("/expedientes")}><IcoFolder />Expedientes</li>
         </ul>
+        <button className="adm-btn" onClick={() => navigate("/registro")}>+ Registro de Paciente</button>
       </div>
       <div className="main" style={{ overflowY: "auto", padding: 0 }}>
         <div className="est-layout">
