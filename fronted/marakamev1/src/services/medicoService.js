@@ -68,22 +68,6 @@ export const actualizarValoracion = async (id_valoracion, datos) => {
   return res.json();
 };
 
-// ==================== VALORACIÓN DE INGRESO ====================
-
-export const obtenerPendientesValoracion = async () => {
-  const res = await fetch(`${BASE_URL}/pendientes-valoracion`);
-  return res.json();
-};
-
-export const valorarIngreso = async (datos) => {
-  const res = await fetch(`${BASE_URL}/valorar-ingreso`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(datos),
-  });
-  return res.json();
-};
-
 // ==================== DIAGNÓSTICO ====================
 
 export const obtenerDiagnosticos = async (id_paciente) => {

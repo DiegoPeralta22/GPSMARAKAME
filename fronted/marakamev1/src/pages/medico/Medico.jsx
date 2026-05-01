@@ -10,10 +10,12 @@ import {
 import Pacientes from "./Pacientes";
 import Expediente from "./Expediente";
 import Valoracion from "./Valoracion";
-import ValoracionIngreso from "./ValoracionIngreso";
 import Desintoxicacion from "./Desintoxicacion";
 import Indicaciones from "./Indicaciones";
 import Laboratorio from "./Laboratorio";
+import Evolucion from "./Evolucion";
+import Diagnostico from "./Diagnostico";
+import Actividades from "./Actividades";
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -108,7 +110,6 @@ const styles = `
 const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: "chart" },
   { id: "pacientes", label: "Pacientes", icon: "users" },
-  { id: "val-ingreso", label: "Val. de Ingreso", icon: "bell" },
   { id: "valoracion", label: "Valoración", icon: "heart" },
   { id: "diagnostico", label: "Diagnóstico", icon: "file" },
   { id: "indicaciones", label: "Indicaciones", icon: "pill" },
@@ -131,7 +132,7 @@ const ICONS = {
   bell: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
 };
 
-const SECCIONES_LISTAS = ["dashboard", "pacientes", "expediente", "val-ingreso", "valoracion", "desintoxicacion", "indicaciones", "laboratorio"];
+const SECCIONES_LISTAS = ["dashboard", "pacientes", "expediente", "valoracion", "desintoxicacion", "indicaciones", "laboratorio", "evolucion", "diagnostico", "actividades"];
 
 function getNotifIconClass(tipo) {
   if (!tipo) return "info";
@@ -277,11 +278,13 @@ export default function Medico() {
         <div className="med-topbar">
           <span>
             {seccionActiva === "expediente" ? "Expediente" :
-             seccionActiva === "val-ingreso" ? "Valoración de Ingreso" :
              seccionActiva === "valoracion" ? "Valoración Médica" :
              seccionActiva === "desintoxicacion" ? "Protocolo de Desintoxicación" :
              seccionActiva === "indicaciones" ? "Indicaciones Médicas" :
              seccionActiva === "laboratorio" ? "Solicitud de Laboratorio" :
+             seccionActiva === "evolucion" ? "Nota de Evolución" :
+             seccionActiva === "diagnostico" ? "Diagnóstico Médico" :
+             seccionActiva === "actividades" ? "Actividades del Paciente" :
              NAV_ITEMS.find(n => n.id === seccionActiva)?.label || "Dashboard"}
           </span>
           {/* CAMPANA */}
@@ -382,7 +385,7 @@ export default function Medico() {
                   </div>
                 ))}
               </div>
-              <div className="med-two-col">
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
                 <div className="med-card">
                   <div className="med-card-header">
                     <span className="med-card-title">Pacientes Recientes</span>
@@ -418,24 +421,6 @@ export default function Medico() {
                     ))}
                 </div>
               </div>
-              <div className="med-card">
-                <div className="med-card-header">
-                  <span className="med-card-title">Acciones Rápidas</span>
-                </div>
-                <div className="med-actions-grid">
-                  {[
-                    { label: "Nueva Valoración", icon: "activity", nav: "valoracion" },
-                    { label: "Nota de Evolución", icon: "chart", nav: "evolucion" },
-                    { label: "Solicitud Laboratorio", icon: "flask", nav: "laboratorio" },
-                    { label: "Ver Pacientes", icon: "users", nav: "pacientes" },
-                  ].map((a, i) => (
-                    <button key={i} className="med-action-btn" onClick={() => handleNav(a.nav)}>
-                      {ICONS[a.icon]}
-                      <span className="med-action-label">{a.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
             </>
           )}
 
@@ -451,11 +436,6 @@ export default function Medico() {
               onVolver={() => setSeccionActiva("pacientes")}
               onNavegar={(seccion) => setSeccionActiva(seccion)}
             />
-          )}
-
-          {/* VALORACIÓN DE INGRESO */}
-          {seccionActiva === "val-ingreso" && (
-            <ValoracionIngreso />
           )}
 
           {/* VALORACIÓN */}
@@ -476,6 +456,21 @@ export default function Medico() {
           {/* LABORATORIO */}
           {seccionActiva === "laboratorio" && (
             <Laboratorio rol={rol} />
+          )}
+
+          {/* EVOLUCIÓN */}
+          {seccionActiva === "evolucion" && (
+            <Evolucion rol={rol} />
+          )}
+
+          {/* DIAGNÓSTICO */}
+          {seccionActiva === "diagnostico" && (
+            <Diagnostico rol={rol} />
+          )}
+
+          {/* ACTIVIDADES */}
+          {seccionActiva === "actividades" && (
+            <Actividades rol={rol} />
           )}
 
           {/* SECCIONES EN DESARROLLO */}

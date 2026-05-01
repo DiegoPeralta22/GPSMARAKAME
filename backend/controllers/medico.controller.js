@@ -94,11 +94,11 @@ exports.obtenerPacientes = async (req, res) => {
         p.id_paciente, p.nombre, p.apellido, p.edad, p.genero,
         e.id_expediente, e.estado, v.sustancia_principal,
         DATEDIFF(day, e.fecha_apertura, GETDATE()) as dias_tratamiento,
-        MAX(ne.fecha) as ultima_visita
+        MAX(d.fecha) as ultimo_diagnostico
       FROM Paciente p
       LEFT JOIN Expediente e ON p.id_paciente = e.id_paciente
       LEFT JOIN ValoracionMedica v ON p.id_paciente = v.id_paciente
-      LEFT JOIN NotaEvolucion ne ON p.id_paciente = ne.id_paciente
+      LEFT JOIN Diagnostico d ON p.id_paciente = d.id_paciente
       WHERE ${whereClause}
       GROUP BY p.id_paciente, p.nombre, p.apellido, p.edad, p.genero,
                e.id_expediente, e.estado, v.sustancia_principal, e.fecha_apertura
@@ -120,6 +120,7 @@ exports.obtenerExpediente = async (req, res) => {
       .input('id_paciente', id_paciente)
       .query(`
         SELECT p.*, e.id_expediente, e.estado,
+               DATEDIFF(day, e.fecha_apertura, GETDATE()) as dias_tratamiento,
                f.nombre as contacto_nombre, f.parentesco as contacto_parentesco,
                f.telefono as contacto_telefono,
                hc.enfermedades_previas, hc.adicciones, hc.tratamientos_previos
@@ -262,7 +263,7 @@ exports.crearValoracionIndependiente = async (req, res) => {
     }
 
     const admision = await pool.request().query(`
-      SELECT id_usuario FROM Usuario WHERE id_rol = 3
+      SELECT id_usuario FROM Usuario WHERE rol = 'admision'
     `);
 
     const mensaje = parseInt(apto) === 1
@@ -868,97 +869,6 @@ exports.crearActividad = async (req, res) => {
   } catch (error) {
     console.log(error);
     res.status(500).send("Error al crear actividad");
-  }
-};
-
-// ==================== VALORACIÓN DE INGRESO ====================
-
-exports.obtenerPendientesValoracion = async (req, res) => {
-  try {
-    const pool = await poolPromise;
-    const result = await pool.request().query(`
-      SELECT
-        p.id_paciente,
-        p.nombre,
-        p.apellido,
-        p.edad,
-        c.id_cuestionario,
-        (SELECT r.respuesta FROM RespuestaCuestionario r WHERE r.id_cuestionario = c.id_cuestionario AND r.id_pregunta = 1) as fecha_ingreso,
-        (SELECT r.respuesta FROM RespuestaCuestionario r WHERE r.id_cuestionario = c.id_cuestionario AND r.id_pregunta = 2) as registrado_por,
-        (SELECT r.respuesta FROM RespuestaCuestionario r WHERE r.id_cuestionario = c.id_cuestionario AND r.id_pregunta = 20) as sustancias
-      FROM Paciente p
-      INNER JOIN Cuestionario c ON p.id_paciente = c.id_paciente
-      LEFT JOIN ValoracionMedica v ON p.id_paciente = v.id_paciente
-      WHERE v.id_valoracion IS NULL
-      ORDER BY p.id_paciente DESC
-    `);
-    res.json(result.recordset);
-  } catch (error) {
-    console.log(error);
-    res.status(500).send("Error al obtener pendientes de valoración");
-  }
-};
-
-exports.valorarIngreso = async (req, res) => {
-  const { id_paciente, id_usuario, observaciones, apto } = req.body;
-  try {
-    const pool = await poolPromise;
-
-    const result = await pool.request()
-      .input('id_paciente', id_paciente)
-      .input('id_usuario', id_usuario)
-      .input('apto', parseInt(apto))
-      .input('observaciones', observaciones || null)
-      .query(`
-        INSERT INTO ValoracionMedica (id_paciente, id_usuario, fecha_valoracion, apto, observaciones)
-        OUTPUT INSERTED.id_valoracion
-        VALUES (@id_paciente, @id_usuario, GETDATE(), @apto, @observaciones)
-      `);
-
-    const id_valoracion = result.recordset[0].id_valoracion;
-
-    if (parseInt(apto) === 1) {
-      try {
-        const existing = await pool.request()
-          .input('id_paciente', id_paciente)
-          .query(`SELECT id_expediente FROM Expediente WHERE id_paciente = @id_paciente`);
-        if (existing.recordset.length === 0) {
-          await pool.request()
-            .input('id_paciente', id_paciente)
-            .query(`INSERT INTO Expediente (id_paciente, estado) VALUES (@id_paciente, 'valoracion')`);
-        } else {
-          await pool.request()
-            .input('id_paciente', id_paciente)
-            .query(`UPDATE Expediente SET estado = 'valoracion' WHERE id_paciente = @id_paciente`);
-        }
-      } catch(e) { console.error("Expediente update error (no crítico):", e.message); }
-    }
-
-    const medico = await pool.request()
-      .input('id_usuario', id_usuario)
-      .query(`SELECT nombre FROM Usuario WHERE id_usuario = @id_usuario`);
-    const nombreMedico = medico.recordset[0]?.nombre || 'El médico';
-    const aptStr = parseInt(apto) === 1 ? 'APTO' : 'NO APTO';
-    const mensaje = `${nombreMedico} valoró al paciente como ${aptStr} para ingreso.`;
-    const tipo = parseInt(apto) === 1 ? 'valoracion_apta' : 'valoracion_no_apta';
-
-    const admision = await pool.request().query(`SELECT id_usuario FROM Usuario WHERE id_rol = 3`);
-    for (const u of admision.recordset) {
-      await pool.request()
-        .input('id_usuario_destino', u.id_usuario)
-        .input('tipo', tipo)
-        .input('mensaje', mensaje)
-        .input('id_referencia', id_valoracion)
-        .query(`
-          INSERT INTO Notificacion (id_usuario_destino, tipo, mensaje, id_referencia, tabla_referencia)
-          VALUES (@id_usuario_destino, @tipo, @mensaje, @id_referencia, 'ValoracionMedica')
-        `);
-    }
-
-    res.json({ id_valoracion });
-  } catch (error) {
-    console.log(error);
-    res.status(500).send("Error al guardar valoración de ingreso");
   }
 };
 
