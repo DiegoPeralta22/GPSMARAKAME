@@ -6,7 +6,9 @@ import {
   obtenerProtocolo,
   obtenerNotas,
   obtenerSolicitudesLab,
-  obtenerActividades
+  obtenerActividades,
+  obtenerNotasNutricionales,
+  obtenerMedicamentosPaciente,
 } from "../../services/medicoService";
 
 const styles = `
@@ -27,7 +29,6 @@ const styles = `
   .exp-estado-badge.valoracion { background: #eff6ff; color: #3b82f6; }
   .exp-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px; }
   .exp-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
-  .exp-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 12px; }
   .exp-field-label { font-size: 11px; color: #9ca3af; margin-bottom: 2px; text-transform: uppercase; }
   .exp-field-value { font-size: 13px; color: #111827; font-weight: 500; }
   .exp-divider { border: none; border-top: 1px solid #f3f4f6; margin: 16px 0; }
@@ -52,7 +53,7 @@ const styles = `
   .exp-historia-value { font-size: 13px; color: #374151; }
 
   /* SIGNOS */
-  .exp-signos-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; padding: 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 8px; }
+  .exp-signos-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 8px; }
   .exp-signo-label { font-size: 10px; color: #9ca3af; text-transform: uppercase; }
   .exp-signo-value { font-size: 13px; color: #111827; font-weight: 600; margin-top: 2px; }
   .exp-signo-fecha { font-size: 11px; color: #6b7280; margin-bottom: 6px; font-weight: 500; }
@@ -76,12 +77,13 @@ const styles = `
   .exp-ind-label { font-size: 10px; color: #9ca3af; text-transform: uppercase; margin-bottom: 2px; }
   .exp-ind-value { font-size: 12px; color: #374151; }
   .exp-med-tag { display: inline-block; background: #eff6ff; color: #1d4ed8; font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 20px; margin-right: 6px; margin-bottom: 4px; }
+  .exp-med-tag.solicitado { background: #fff7ed; color: #ea580c; }
+  .exp-med-tag.controlado { background: #fee2e2; color: #dc2626; }
 
   /* DESINTOXICACIÓN */
   .exp-dex-item { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 16px; margin-bottom: 10px; }
   .exp-dex-header { display: flex; justify-content: space-between; margin-bottom: 12px; }
   .exp-dex-nombre { font-size: 13px; font-weight: 600; color: #111827; }
-  .exp-dex-fecha { font-size: 11px; color: #9ca3af; }
   .exp-dex-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; }
   .exp-dex-label { font-size: 10px; color: #9ca3af; text-transform: uppercase; margin-bottom: 2px; }
   .exp-dex-value { font-size: 12px; color: #374151; font-weight: 500; }
@@ -89,8 +91,6 @@ const styles = `
   .exp-ciwa-badge.leve { background: #f0fdf4; color: #16a34a; }
   .exp-ciwa-badge.moderado { background: #fefce8; color: #ca8a04; }
   .exp-ciwa-badge.severo { background: #fff1f2; color: #ef4444; }
-  .exp-seg-item { background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px 12px; margin-bottom: 6px; }
-  .exp-seg-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
 
   /* EVOLUCIÓN */
   .exp-nota-item { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 16px; margin-bottom: 10px; }
@@ -127,6 +127,32 @@ const styles = `
   .exp-act-tag.Deportes { background: #f0fdf4; color: #16a34a; }
   .exp-act-tag.Servicio { background: #fff7ed; color: #f97316; }
   .exp-act-tag.Recreación { background: #fef9c3; color: #ca8a04; }
+
+  /* NUTRICIÓN */
+  .exp-nut-item { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 16px; margin-bottom: 10px; }
+  .exp-nut-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+  .exp-nut-autor { font-size: 12px; font-weight: 600; color: #374151; }
+  .exp-nut-fecha { font-size: 11px; color: #9ca3af; }
+  .exp-nut-dieta { font-size: 11px; font-weight: 600; padding: 2px 10px; border-radius: 20px; background: #d1fae5; color: #065f46; }
+  .exp-nut-notif { font-size: 11px; color: #d97706; font-weight: 600; }
+  .exp-nut-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; background: #fff; border: 1px solid #f3f4f6; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+  .exp-nut-label { font-size: 10px; color: #9ca3af; text-transform: uppercase; }
+  .exp-nut-value { font-size: 12px; color: #374151; font-weight: 500; margin-top: 2px; }
+  .exp-nut-restriccion { font-size: 12px; color: #ef4444; padding: 6px 10px; background: #fff1f2; border-radius: 6px; margin-bottom: 8px; }
+  .exp-nut-plan { font-size: 12px; color: #374151; line-height: 1.5; margin-bottom: 8px; }
+  .exp-nut-obs { font-size: 12px; color: #6b7280; border-top: 1px solid #f3f4f6; padding-top: 8px; }
+
+  /* MEDICAMENTOS PACIENTE */
+  .exp-medpac-item { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 16px; margin-bottom: 10px; }
+  .exp-medpac-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+  .exp-medpac-nombre { font-size: 14px; font-weight: 600; color: #111827; }
+  .exp-medpac-estado { font-size: 11px; font-weight: 600; padding: 2px 10px; border-radius: 20px; }
+  .exp-medpac-estado.pendiente { background: #fef9c3; color: #ca8a04; }
+  .exp-medpac-estado.aprobado { background: #d1fae5; color: #059669; }
+  .exp-medpac-estado.listo_recoger { background: #dbeafe; color: #1d4ed8; }
+  .exp-medpac-estado.entregado { background: #f3f4f6; color: #6b7280; }
+  .exp-medpac-estado.rechazado { background: #fee2e2; color: #dc2626; }
+  .exp-medpac-detalle { font-size: 12px; color: #6b7280; }
 `;
 
 const TABS = [
@@ -137,6 +163,8 @@ const TABS = [
   { id: "evolucion", label: "📈 Evolución" },
   { id: "laboratorio", label: "🔬 Laboratorio" },
   { id: "actividades", label: "🏃 Actividades" },
+  { id: "nutricion", label: "🥗 Nutrición" },
+  { id: "medicamentos", label: "💉 Medicamentos" },
 ];
 
 function ciwaLabel(val) {
@@ -147,18 +175,20 @@ function ciwaLabel(val) {
   return <span className="exp-ciwa-badge severo">🔴 Severo</span>;
 }
 
+const estadoMedLabel = { pendiente: "Pendiente", aprobado: "Aprobado", listo_recoger: "Listo p/ Recoger", entregado: "Entregado", rechazado: "Rechazado" };
+
 export default function Expediente({ id_paciente, onVolver, onNavegar }) {
   const [tabActiva, setTabActiva] = useState("resumen");
   const [datos, setDatos] = useState(null);
   const [cargando, setCargando] = useState(true);
-
-  // Datos por área
   const [diagnosticos, setDiagnosticos] = useState([]);
   const [indicaciones, setIndicaciones] = useState({ indicaciones: [], medicamentos: [] });
   const [protocolos, setProtocolos] = useState([]);
   const [notas, setNotas] = useState([]);
   const [laboratorio, setLaboratorio] = useState({ solicitudes: [], estudios: [] });
   const [actividades, setActividades] = useState({ actividades: [], detalles: [] });
+  const [notasNutricionales, setNotasNutricionales] = useState([]);
+  const [medicamentosPaciente, setMedicamentosPaciente] = useState([]);
   const [cargandoTab, setCargandoTab] = useState(false);
   const [tabsCargadas, setTabsCargadas] = useState(new Set(["resumen"]));
 
@@ -204,6 +234,12 @@ export default function Expediente({ id_paciente, onVolver, onNavegar }) {
       } else if (tab === "actividades") {
         const data = await obtenerActividades(id_paciente);
         setActividades(data || { actividades: [], detalles: [] });
+      } else if (tab === "nutricion") {
+        const data = await obtenerNotasNutricionales(id_paciente);
+        setNotasNutricionales(Array.isArray(data) ? data : []);
+      } else if (tab === "medicamentos") {
+        const data = await obtenerMedicamentosPaciente(id_paciente);
+        setMedicamentosPaciente(Array.isArray(data) ? data : []);
       }
       setTabsCargadas(prev => new Set([...prev, tab]));
     } catch (error) {
@@ -238,7 +274,6 @@ export default function Expediente({ id_paciente, onVolver, onNavegar }) {
         <h1 className="exp-title">Expediente Clínico</h1>
         <p className="exp-subtitle">Información completa del paciente</p>
 
-        {/* HEADER PACIENTE */}
         <div className="exp-card">
           <div className="exp-patient-header">
             <div className="exp-avatar">{iniciales}</div>
@@ -282,11 +317,7 @@ export default function Expediente({ id_paciente, onVolver, onNavegar }) {
         <div className="exp-tabs-wrap">
           <div className="exp-tabs">
             {TABS.map(t => (
-              <button
-                key={t.id}
-                className={`exp-tab ${tabActiva === t.id ? "active" : ""}`}
-                onClick={() => setTabActiva(t.id)}
-              >
+              <button key={t.id} className={`exp-tab ${tabActiva === t.id ? "active" : ""}`} onClick={() => setTabActiva(t.id)}>
                 {t.label}
               </button>
             ))}
@@ -316,7 +347,6 @@ export default function Expediente({ id_paciente, onVolver, onNavegar }) {
                           <div className="exp-historia-value">{paciente.tratamientos_previos || <span style={{ color: "#9ca3af", fontStyle: "italic" }}>Sin registro</span>}</div>
                         </div>
                       </div>
-
                       <div>
                         <div className="exp-section-title">Signos Vitales Recientes</div>
                         {signosVitales.length === 0 ? (
@@ -325,7 +355,7 @@ export default function Expediente({ id_paciente, onVolver, onNavegar }) {
                           signosVitales.map((s, i) => (
                             <div key={i}>
                               <div className="exp-signo-fecha">📅 {s.fecha ? new Date(s.fecha).toLocaleDateString() : "—"} {s.hora}</div>
-                              <div className="exp-signos-row" style={{ gridTemplateColumns: "repeat(4,1fr)" }}>
+                              <div className="exp-signos-row">
                                 <div><div className="exp-signo-label">Presión</div><div className="exp-signo-value">{s.presion_arterial || "—"}</div></div>
                                 <div><div className="exp-signo-label">Glucosa</div><div className="exp-signo-value">{s.glucosa || "—"}</div></div>
                                 <div><div className="exp-signo-label">Temp</div><div className="exp-signo-value">{s.temperatura ? `${s.temperatura}°C` : "—"}</div></div>
@@ -336,7 +366,6 @@ export default function Expediente({ id_paciente, onVolver, onNavegar }) {
                         )}
                       </div>
                     </div>
-
                     {notasRecientes.length > 0 && (
                       <div style={{ marginTop: 20 }}>
                         <div className="exp-section-title">Actividad Reciente</div>
@@ -356,10 +385,8 @@ export default function Expediente({ id_paciente, onVolver, onNavegar }) {
                 {tabActiva === "diagnostico" && (
                   <div>
                     <div className="exp-section-title">Diagnósticos Registrados ({diagnosticos.length})</div>
-                    {diagnosticos.length === 0 ? (
-                      <div className="exp-empty">No hay diagnósticos registrados</div>
-                    ) : (
-                      diagnosticos.map((d, i) => (
+                    {diagnosticos.length === 0 ? <div className="exp-empty">No hay diagnósticos registrados</div>
+                      : diagnosticos.map((d, i) => (
                         <div className="exp-dx-item" key={i}>
                           <div>
                             <div className="exp-dx-codigo">{d.codigo_cie10}</div>
@@ -368,8 +395,7 @@ export default function Expediente({ id_paciente, onVolver, onNavegar }) {
                           </div>
                           <span className={`exp-dx-tipo ${d.tipo}`}>{d.tipo?.charAt(0).toUpperCase() + d.tipo?.slice(1)}</span>
                         </div>
-                      ))
-                    )}
+                      ))}
                   </div>
                 )}
 
@@ -377,10 +403,8 @@ export default function Expediente({ id_paciente, onVolver, onNavegar }) {
                 {tabActiva === "indicaciones" && (
                   <div>
                     <div className="exp-section-title">Indicaciones Médicas ({indicaciones.indicaciones?.length || 0})</div>
-                    {!indicaciones.indicaciones?.length ? (
-                      <div className="exp-empty">No hay indicaciones registradas</div>
-                    ) : (
-                      indicaciones.indicaciones.map((ind, i) => {
+                    {!indicaciones.indicaciones?.length ? <div className="exp-empty">No hay indicaciones registradas</div>
+                      : indicaciones.indicaciones.map((ind, i) => {
                         const meds = indicaciones.medicamentos?.filter(m => m.id_indicacion === ind.id_indicacion) || [];
                         return (
                           <div className="exp-ind-item" key={i}>
@@ -393,23 +417,20 @@ export default function Expediente({ id_paciente, onVolver, onNavegar }) {
                               {ind.nivel_actividad && <div><div className="exp-ind-label">Actividad</div><div className="exp-ind-value">{ind.nivel_actividad}</div></div>}
                               {ind.monitoreo && <div><div className="exp-ind-label">Monitoreo</div><div className="exp-ind-value">{ind.monitoreo}</div></div>}
                             </div>
-                            {ind.indicaciones_generales && (
-                              <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 8 }}>📝 {ind.indicaciones_generales}</div>
-                            )}
+                            {ind.indicaciones_generales && <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 8 }}>📝 {ind.indicaciones_generales}</div>}
                             {meds.length > 0 && (
                               <div>
                                 <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 6, textTransform: "uppercase" }}>Medicamentos</div>
                                 {meds.map((m, j) => (
-                                  <span key={j} className="exp-med-tag" title={`${m.dosis} • ${m.frecuencia} • Vía ${m.via}`}>
-                                    {m.nombre} {m.dosis}
+                                  <span key={j} className={`exp-med-tag ${m.es_controlado ? "controlado" : ""}`} title={`${m.dosis} • ${m.frecuencia} • Vía ${m.via}`}>
+                                    {m.es_controlado ? "⚠️ " : ""}{m.nombre} {m.dosis}
                                   </span>
                                 ))}
                               </div>
                             )}
                           </div>
                         );
-                      })
-                    )}
+                      })}
                   </div>
                 )}
 
@@ -417,10 +438,8 @@ export default function Expediente({ id_paciente, onVolver, onNavegar }) {
                 {tabActiva === "desintoxicacion" && (
                   <div>
                     <div className="exp-section-title">Protocolo de Desintoxicación ({protocolos.length})</div>
-                    {protocolos.length === 0 ? (
-                      <div className="exp-empty">No hay protocolo de desintoxicación registrado</div>
-                    ) : (
-                      protocolos.map((p, i) => (
+                    {protocolos.length === 0 ? <div className="exp-empty">No hay protocolo de desintoxicación registrado</div>
+                      : protocolos.map((p, i) => (
                         <div className="exp-dex-item" key={i}>
                           <div className="exp-dex-header">
                             <div>
@@ -438,8 +457,7 @@ export default function Expediente({ id_paciente, onVolver, onNavegar }) {
                           {p.protocolo_sedacion && <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>💊 <strong>Sedación:</strong> {p.protocolo_sedacion}</div>}
                           {p.precauciones_especiales && <div style={{ fontSize: 12, color: "#f97316" }}>⚠️ <strong>Precauciones:</strong> {p.precauciones_especiales}</div>}
                         </div>
-                      ))
-                    )}
+                      ))}
                   </div>
                 )}
 
@@ -447,10 +465,8 @@ export default function Expediente({ id_paciente, onVolver, onNavegar }) {
                 {tabActiva === "evolucion" && (
                   <div>
                     <div className="exp-section-title">Notas de Evolución ({notas.length})</div>
-                    {notas.length === 0 ? (
-                      <div className="exp-empty">No hay notas de evolución registradas</div>
-                    ) : (
-                      notas.map((n, i) => (
+                    {notas.length === 0 ? <div className="exp-empty">No hay notas de evolución registradas</div>
+                      : notas.map((n, i) => (
                         <div className="exp-nota-item" key={i}>
                           <div className="exp-nota-header">
                             <div>
@@ -459,7 +475,6 @@ export default function Expediente({ id_paciente, onVolver, onNavegar }) {
                             </div>
                             {n.dia_tratamiento && <span className="exp-nota-dia">Día {n.dia_tratamiento}</span>}
                           </div>
-
                           <div className="exp-nota-signos">
                             <div><div className="exp-signo-label">Presión</div><div className="exp-signo-value">{n.presion_arterial || "—"}</div></div>
                             <div><div className="exp-signo-label">FC</div><div className="exp-signo-value">{n.frecuencia_cardiaca ? `${n.frecuencia_cardiaca} lpm` : "—"}</div></div>
@@ -468,14 +483,12 @@ export default function Expediente({ id_paciente, onVolver, onNavegar }) {
                             <div><div className="exp-signo-label">Temp</div><div className="exp-signo-value">{n.temperatura ? `${n.temperatura}°C` : "—"}</div></div>
                             <div><div className="exp-signo-label">Glucosa</div><div className="exp-signo-value">{n.glucosa ? `${n.glucosa} mg/dL` : "—"}</div></div>
                           </div>
-
                           <div className="exp-nota-soap">
                             <div><div className="exp-nota-soap-label s">S — Subjetivo</div><div className="exp-nota-soap-value">{n.subjetivo || "—"}</div></div>
                             <div><div className="exp-nota-soap-label o">O — Objetivo</div><div className="exp-nota-soap-value">{n.objetivo || "—"}</div></div>
                             <div><div className="exp-nota-soap-label a">A — Análisis</div><div className="exp-nota-soap-value">{n.analisis || "—"}</div></div>
                             <div><div className="exp-nota-soap-label p">P — Plan</div><div className="exp-nota-soap-value">{n.plan || "—"}</div></div>
                           </div>
-
                           {(n.estado_mental || n.condicion_general || n.estado_animo) && (
                             <div style={{ display: "flex", gap: 16, fontSize: 12, color: "#6b7280" }}>
                               {n.estado_mental && <span>🧠 {n.estado_mental}</span>}
@@ -484,8 +497,7 @@ export default function Expediente({ id_paciente, onVolver, onNavegar }) {
                             </div>
                           )}
                         </div>
-                      ))
-                    )}
+                      ))}
                   </div>
                 )}
 
@@ -493,10 +505,8 @@ export default function Expediente({ id_paciente, onVolver, onNavegar }) {
                 {tabActiva === "laboratorio" && (
                   <div>
                     <div className="exp-section-title">Solicitudes de Laboratorio ({laboratorio.solicitudes?.length || 0})</div>
-                    {!laboratorio.solicitudes?.length ? (
-                      <div className="exp-empty">No hay solicitudes de laboratorio registradas</div>
-                    ) : (
-                      laboratorio.solicitudes.map((sol, i) => {
+                    {!laboratorio.solicitudes?.length ? <div className="exp-empty">No hay solicitudes de laboratorio registradas</div>
+                      : laboratorio.solicitudes.map((sol, i) => {
                         const estudios = laboratorio.estudios?.filter(e => e.id_solicitud_lab === sol.id_solicitud_lab) || [];
                         return (
                           <div className="exp-lab-item" key={i}>
@@ -512,21 +522,16 @@ export default function Expediente({ id_paciente, onVolver, onNavegar }) {
                                 </span>
                               </div>
                             </div>
-                            {sol.indicacion_diagnostico && (
-                              <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 8 }}>📋 {sol.indicacion_diagnostico}</div>
-                            )}
+                            {sol.indicacion_diagnostico && <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 8 }}>📋 {sol.indicacion_diagnostico}</div>}
                             {estudios.length > 0 && (
                               <div>
                                 <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 6, textTransform: "uppercase" }}>Estudios ({estudios.length})</div>
-                                {estudios.map((e, j) => (
-                                  <span key={j} className="exp-estudio-tag">{e.nombre_estudio}</span>
-                                ))}
+                                {estudios.map((e, j) => <span key={j} className="exp-estudio-tag">{e.nombre_estudio}</span>)}
                               </div>
                             )}
                           </div>
                         );
-                      })
-                    )}
+                      })}
                   </div>
                 )}
 
@@ -534,10 +539,8 @@ export default function Expediente({ id_paciente, onVolver, onNavegar }) {
                 {tabActiva === "actividades" && (
                   <div>
                     <div className="exp-section-title">Actividades Registradas ({actividades.actividades?.length || 0})</div>
-                    {!actividades.actividades?.length ? (
-                      <div className="exp-empty">No hay actividades registradas</div>
-                    ) : (
-                      actividades.actividades.map((a, i) => {
+                    {!actividades.actividades?.length ? <div className="exp-empty">No hay actividades registradas</div>
+                      : actividades.actividades.map((a, i) => {
                         const dets = actividades.detalles?.filter(d => d.id_actividad === a.id_actividad) || [];
                         return (
                           <div className="exp-act-item" key={i}>
@@ -550,22 +553,71 @@ export default function Expediente({ id_paciente, onVolver, onNavegar }) {
                                 <div className="exp-act-fecha">{a.fecha ? new Date(a.fecha).toLocaleDateString() : "—"}</div>
                               </div>
                             </div>
-                            {dets.length > 0 && (
-                              <div>
-                                {dets.map((d, j) => (
-                                  <span key={j} className={`exp-act-tag ${d.categoria}`}>{d.nombre_actividad}</span>
-                                ))}
-                              </div>
-                            )}
-                            {a.observaciones && (
-                              <div style={{ fontSize: 12, color: "#6b7280", marginTop: 8, borderTop: "1px solid #f3f4f6", paddingTop: 8 }}>
-                                💬 {a.observaciones}
-                              </div>
-                            )}
+                            {dets.length > 0 && <div>{dets.map((d, j) => <span key={j} className={`exp-act-tag ${d.categoria}`}>{d.nombre_actividad}</span>)}</div>}
+                            {a.observaciones && <div style={{ fontSize: 12, color: "#6b7280", marginTop: 8, borderTop: "1px solid #f3f4f6", paddingTop: 8 }}>💬 {a.observaciones}</div>}
                           </div>
                         );
-                      })
-                    )}
+                      })}
+                  </div>
+                )}
+
+                {/* ===== NUTRICIÓN ===== */}
+                {tabActiva === "nutricion" && (
+                  <div>
+                    <div className="exp-section-title">Notas Nutricionales ({notasNutricionales.length})</div>
+                    {notasNutricionales.length === 0 ? <div className="exp-empty">No hay notas nutricionales registradas</div>
+                      : notasNutricionales.map((n, i) => (
+                        <div className="exp-nut-item" key={i}>
+                          <div className="exp-nut-header">
+                            <div>
+                              <div className="exp-nut-autor">🥗 {n.nombre_nutriologo}</div>
+                              <div style={{ fontSize: 11, color: "#9ca3af" }}>📅 {n.fecha ? new Date(n.fecha).toLocaleDateString() : "—"}</div>
+                            </div>
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                              {n.tipo_dieta && <span className="exp-nut-dieta">{n.tipo_dieta}</span>}
+                              {n.notificar_medico && <span className="exp-nut-notif">🔔 Médico notificado</span>}
+                            </div>
+                          </div>
+                          <div className="exp-nut-grid">
+                            <div><div className="exp-nut-label">Tipo de Dieta</div><div className="exp-nut-value">{n.tipo_dieta || "—"}</div></div>
+                            <div><div className="exp-nut-label">Calorías</div><div className="exp-nut-value">{n.calorias_recomendadas ? `${n.calorias_recomendadas} kcal/día` : "—"}</div></div>
+                            <div><div className="exp-nut-label">Fecha Registro</div><div className="exp-nut-value">{n.fecha_registro ? new Date(n.fecha_registro).toLocaleString() : "—"}</div></div>
+                          </div>
+                          {n.plan_alimentario && <div className="exp-nut-plan">📋 <strong>Plan:</strong> {n.plan_alimentario}</div>}
+                          {n.restricciones_alergias && <div className="exp-nut-restriccion">⚠️ <strong>Restricciones:</strong> {n.restricciones_alergias}</div>}
+                          {n.observaciones && <div className="exp-nut-obs">💬 {n.observaciones}</div>}
+                        </div>
+                      ))}
+                  </div>
+                )}
+
+                {/* ===== MEDICAMENTOS PACIENTE ===== */}
+                {tabActiva === "medicamentos" && (
+                  <div>
+                    <div className="exp-section-title">Medicamentos Solicitados ({medicamentosPaciente.length})</div>
+                    {medicamentosPaciente.length === 0 ? <div className="exp-empty">No hay medicamentos solicitados para este paciente</div>
+                      : medicamentosPaciente.map((m, i) => (
+                        <div className="exp-medpac-item" key={i}>
+                          <div className="exp-medpac-header">
+                            <div>
+                              <div className="exp-medpac-nombre">
+                                {m.es_controlado ? "⚠️ " : ""}{m.es_externo ? "🏪 " : "💊 "}{m.nombre_medicamento}
+                              </div>
+                              <div className="exp-medpac-detalle">Dr. {m.nombre_medico} • {m.fecha_solicitud ? new Date(m.fecha_solicitud).toLocaleDateString() : "—"}</div>
+                            </div>
+                            <span className={`exp-medpac-estado ${m.estado}`}>{estadoMedLabel[m.estado] || m.estado}</span>
+                          </div>
+                          <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                            {m.dosis && <div className="exp-medpac-detalle">Dosis: <strong>{m.dosis}</strong></div>}
+                            {m.cantidad && <div className="exp-medpac-detalle">Cantidad: <strong>{m.cantidad}</strong></div>}
+                            {m.frecuencia && <div className="exp-medpac-detalle">Frecuencia: <strong>{m.frecuencia}</strong></div>}
+                            {m.via && <div className="exp-medpac-detalle">Vía: <strong>{m.via}</strong></div>}
+                          </div>
+                          {m.es_externo && <div style={{ fontSize: 11, color: "#ea580c", marginTop: 6, fontWeight: 600 }}>📦 Medicamento externo — traído por el familiar</div>}
+                          {m.decision_jefe && <div style={{ fontSize: 11, color: m.decision_jefe === "aprobado" ? "#059669" : "#dc2626", marginTop: 4 }}>{m.decision_jefe === "aprobado" ? "✅ Aprobado" : "❌ Rechazado"} por jefatura médica</div>}
+                          {m.nombre_enfermera && <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4 }}>💉 Entregado por: {m.nombre_enfermera} — {m.fecha_entrega ? new Date(m.fecha_entrega).toLocaleString() : "—"}</div>}
+                        </div>
+                      ))}
                   </div>
                 )}
               </>

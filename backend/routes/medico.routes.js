@@ -52,4 +52,30 @@ router.get('/notificaciones/:id_usuario', medico.obtenerNotificaciones);
 router.put('/notificaciones/:id_notificacion/leida', medico.marcarLeida);
 router.put('/notificaciones/todas/:id_usuario/leidas', medico.marcarTodasLeidas);
 
+// Medicamentos
+router.get('/medicamentos', medico.obtenerMedicamentos);
+router.post('/medicamentos', medico.crearMedicamento);
+router.put('/medicamentos/:id_medicamento/controlado', medico.actualizarControlado);
+router.post('/medicamentos/movimiento', medico.registrarMovimiento);
+router.get('/medicamentos/movimientos/:id_medicamento', medico.obtenerMovimientos);
+
+// Solicitudes de Medicamento
+router.get('/solicitudes-medicamento', medico.obtenerSolicitudesMedicamento);
+router.post('/solicitudes-medicamento', medico.crearSolicitudMedicamento);
+router.put('/solicitudes-medicamento/:id_solicitud/aprobar', medico.aprobarSolicitudMedicamento);
+router.put('/solicitudes-medicamento/:id_solicitud/verificar-externo', medico.verificarIngresoExterno);
+router.put('/solicitudes-medicamento/:id_solicitud/entregar', medico.registrarEntregaEnfermera);
+router.get('/medicamentos-paciente/:id_paciente', medico.obtenerMedicamentosPaciente);
+
+// Personal
+router.get('/personal', medico.obtenerPersonal);
+
+// Solicitudes de cambio (jefe)
+router.get('/solicitudes-cambio', medico.obtenerSolicitudesCambio);
+router.put('/solicitudes-cambio/:id_solicitud/resolver', medico.resolverSolicitud);
+
+// Notas Nutricionales
+router.get('/nutricion/:id_paciente', medico.obtenerNotasNutricionales);
+router.post('/nutricion', medico.crearNotaNutricional);
+
 module.exports = router;

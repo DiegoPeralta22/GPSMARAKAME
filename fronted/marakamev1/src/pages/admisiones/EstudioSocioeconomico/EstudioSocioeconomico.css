@@ -68,3 +68,12 @@
 .est-nav { display: flex; justify-content: space-between; margin-top: 20px; }
 .est-btn-ant { padding: 10px 20px; border: 1px solid #0b5d5b; color: #0b5d5b; background: #fff; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .est-btn-sig { padding: 10px 24px; background: #0b5d5b; color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+
+@media print {
+  .adm-sidebar, .est-sidebar, .est-steps, .est-nav, .est-btn-borrador, .est-btn-save, .adm-sidebar-bottom { display: none !important; }
+  .est-layout { max-width: 100%; padding: 12px; margin: 0; }
+  .est-header { border-bottom: 2px solid #0b5d5b; margin-bottom: 14px; padding-bottom: 10px; }
+  .est-card { box-shadow: none; border: 1px solid #ccc; break-inside: avoid; margin-bottom: 10px; }
+  body { font-size: 10pt; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

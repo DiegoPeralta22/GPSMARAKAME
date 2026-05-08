@@ -10,6 +10,9 @@ import ValidarIngreso from "./pages/admisiones/ValidarIngreso/ValidarIngreso.jsx
 import Director from "./pages/director/Director.jsx";
 import Administrador from "./pages/adminstrador/Administrador.jsx";
 import Medico from "./pages/medico/Medico.jsx";
+import JefeMedico from "./pages/Jefe/JefeMedico.jsx";
+import Enfermera from "./pages/enfermera/Enfermera.jsx";
+import Nutriologo from "./pages/nutriologo/Nutriologo.jsx";
 import Clinico from "./pages/clinico/Clinico.jsx";
 import Contratos from "./pages/contratos/Contratos.jsx";
 import Preingreso from "./pages/preingreso/Preingreso.jsx";
@@ -28,6 +31,9 @@ ReactDOM.createRoot(document.getElementById("root")).render(
       <Route path="/director" element={<Director />} />
       <Route path="/administrador" element={<Administrador />} />
       <Route path="/medico" element={<Medico />} />
+      <Route path="/jefe-medico" element={<JefeMedico />} />
+      <Route path="/enfermera" element={<Enfermera />} />
+      <Route path="/nutriologo" element={<Nutriologo />} />
       <Route path="/clinico" element={<Clinico />} />
       <Route path="/contratos" element={<Contratos />} />
       <Route path="/preingreso" element={<Preingreso />} />

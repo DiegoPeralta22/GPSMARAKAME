@@ -190,6 +190,7 @@ export default function Diagnostico({ rol }) {
   const [modalSolicitud, setModalSolicitud] = useState(null);
 
   const usuario = JSON.parse(localStorage.getItem("usuario") || "{}");
+  const esReadOnly = rol === "enfermera";
 
   useEffect(() => {
     if (busqueda.length >= 2) buscarPacientes();
@@ -330,15 +331,15 @@ export default function Diagnostico({ rol }) {
         {/* CONTENIDO TRAS SELECCIONAR PACIENTE */}
         {pacienteSeleccionado && (
           <>
-            {/* BOTÓN NUEVO DIAGNÓSTICO */}
-            {!mostrarForm && (
+            {/* BOTÓN NUEVO DIAGNÓSTICO — solo médico y jefe */}
+            {!mostrarForm && !esReadOnly && (
               <button className="dx-nueva-btn" onClick={() => setMostrarForm(true)}>
                 ➕ Nuevo Diagnóstico
               </button>
             )}
 
-            {/* FORMULARIO */}
-            {mostrarForm && (
+            {/* FORMULARIO — solo médico y jefe */}
+            {mostrarForm && !esReadOnly && (
               <div className="dx-form-container">
                 <div className="dx-form-title">📋 Nuevo Diagnóstico</div>
 
