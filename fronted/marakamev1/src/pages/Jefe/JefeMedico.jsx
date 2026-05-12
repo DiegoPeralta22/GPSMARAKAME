@@ -253,6 +253,7 @@ const NAV_ITEMS = [
   { section: "JEFATURA" },
   { id: "medicamentos", label: "Medicamentos", icon: "medicine" },
   { id: "solicitudes-med", label: "Sol. Medicamentos", icon: "clipboard" },
+  { id: "requisiciones", label: "Requisiciones", icon: "cart" },
   { id: "personal", label: "Personal", icon: "team" },
   { id: "solicitudes", label: "Solicitudes Dx", icon: "check" },
 ];
@@ -268,6 +269,7 @@ const ICONS = {
   flask: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 3h6l1 9H8L9 3z"/><path d="M6.5 21a5 5 0 0 0 11 0c0-3-2.5-5.5-5.5-8.5C9 15.5 6.5 18 6.5 21z"/></svg>,
   calendar: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
   medicine: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2z"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>,
+  cart: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>,
   clipboard: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>,
   team: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
   check: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>,
@@ -683,6 +685,7 @@ function ModalHistorial({ med, onClose }) {
               <div>
                 <div className={`jefe-mov-tipo ${m.tipo}`}>{m.tipo === "entrada" ? "⬆️ Entrada" : "⬇️ Salida"}</div>
                 <div className="jefe-mov-meta">{m.nombre_usuario} • {m.fecha ? new Date(m.fecha).toLocaleString() : "—"}</div>
+                {m.nombre_paciente && <div className="jefe-mov-meta">👤 Paciente: {m.nombre_paciente}</div>}
                 {m.motivo && <div className="jefe-mov-meta">💬 {m.motivo}</div>}
               </div>
               <div className={`jefe-mov-cantidad ${m.tipo}`}>{m.tipo === "entrada" ? "+" : "-"}{m.cantidad} {med.unidad_minima || "u"}</div>
@@ -816,6 +819,111 @@ function ModalVerificarExterno({ solicitud, onClose, onExito, usuario }) {
   );
 }
 
+function ModalNuevaRequisicion({ usuario, medicamentos, onClose, onExito }) {
+  const [form, setForm] = useState({ tipo: "medicamento", descripcion: "", cantidad: "", unidad: "", motivo: "", id_medicamento: "" });
+  const [guardando, setGuardando] = useState(false);
+  const [errores, setErrores] = useState({});
+
+  const validar = () => {
+    const e = {};
+    if (!form.descripcion.trim()) e.descripcion = "Requerido";
+    if (!form.cantidad || Number(form.cantidad) <= 0) e.cantidad = "Requerido";
+    setErrores(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handleGuardar = async () => {
+    if (!validar()) return;
+    try {
+      setGuardando(true);
+      await fetch("http://localhost:3000/medico/requisiciones", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id_usuario_jefe: usuario.id_usuario,
+          tipo: form.tipo,
+          descripcion: form.descripcion,
+          cantidad: parseInt(form.cantidad),
+          unidad: form.unidad || null,
+          motivo: form.motivo || null,
+          id_medicamento: form.id_medicamento || null,
+        })
+      });
+      onExito("✅ Requisición enviada a administración correctamente.");
+      onClose();
+    } catch (e) { console.error(e); }
+    finally { setGuardando(false); }
+  };
+
+  return (
+    <div className="jefe-modal-overlay" onClick={onClose}>
+      <div className="jefe-modal" onClick={e => e.stopPropagation()}>
+        <div className="jefe-modal-title">📋 Nueva Requisición</div>
+
+        <div className="jefe-field">
+          <label className="jefe-label">Tipo <span>*</span></label>
+          <select className="jefe-select" value={form.tipo} onChange={e => setForm({ ...form, tipo: e.target.value })}>
+            <option value="medicamento">💊 Medicamento</option>
+            <option value="insumo">🩺 Insumo Médico</option>
+          </select>
+        </div>
+
+        {form.tipo === "medicamento" && medicamentos.length > 0 && (
+          <div className="jefe-field">
+            <label className="jefe-label">Medicamento del Inventario (opcional)</label>
+            <select className="jefe-select" value={form.id_medicamento} onChange={e => {
+              const med = medicamentos.find(m => m.id_medicamento === parseInt(e.target.value));
+              setForm({ ...form, id_medicamento: e.target.value, descripcion: med ? med.nombre : form.descripcion, unidad: med ? (med.unidad_minima || "") : form.unidad });
+            }}>
+              <option value="">Seleccionar del inventario...</option>
+              {medicamentos.filter(m => m.tipo !== "insumo").map((m, i) => (
+                <option key={i} value={m.id_medicamento}>{m.nombre} — Stock: {m.stock_actual} {m.unidad_minima}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div className="jefe-field">
+          <label className="jefe-label">Descripción <span>*</span></label>
+          <input className={`jefe-input ${errores.descripcion ? "error" : ""}`}
+            placeholder={form.tipo === "medicamento" ? "ej. Paracetamol 500mg tabletas" : "ej. Guantes de látex talla M"}
+            value={form.descripcion} onChange={e => { setForm({ ...form, descripcion: e.target.value }); setErrores(p => ({ ...p, descripcion: undefined })); }} />
+          {errores.descripcion && <span className="jefe-error-msg">{errores.descripcion}</span>}
+        </div>
+
+        <div className="jefe-grid-2">
+          <div className="jefe-field" style={{ marginBottom: 0 }}>
+            <label className="jefe-label">Cantidad <span>*</span></label>
+            <input className={`jefe-input ${errores.cantidad ? "error" : ""}`} type="number" min="1" placeholder="ej. 100"
+              value={form.cantidad} onChange={e => { setForm({ ...form, cantidad: e.target.value }); setErrores(p => ({ ...p, cantidad: undefined })); }} />
+            {errores.cantidad && <span className="jefe-error-msg">{errores.cantidad}</span>}
+          </div>
+          <div className="jefe-field" style={{ marginBottom: 0 }}>
+            <label className="jefe-label">Unidad</label>
+            <input className="jefe-input" placeholder="ej. tabletas, cajas, pares"
+              value={form.unidad} onChange={e => setForm({ ...form, unidad: e.target.value })} />
+          </div>
+        </div>
+
+        <div style={{ marginTop: 14 }} />
+
+        <div className="jefe-field">
+          <label className="jefe-label">Motivo / Justificación</label>
+          <textarea className="jefe-textarea" placeholder="ej. Stock bajo, alta demanda de pacientes..."
+            value={form.motivo} onChange={e => setForm({ ...form, motivo: e.target.value })} />
+        </div>
+
+        <div className="jefe-modal-footer">
+          <button className="jefe-btn-cancel" onClick={onClose}>Cancelar</button>
+          <button className="jefe-btn-save" onClick={handleGuardar} disabled={guardando}>
+            {guardando ? "Enviando..." : "📤 Enviar Requisición"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function JefeMedico() {
   const [seccionActiva, setSeccionActiva] = useState("dashboard");
   const [tabMeds, setTabMeds] = useState("todos");
@@ -844,6 +952,10 @@ export default function JefeMedico() {
   const [modalAprobarMed, setModalAprobarMed] = useState(null);
   const [modalVerificarExt, setModalVerificarExt] = useState(null);
   const [exitoSolMed, setExitoSolMed] = useState(null);
+  const [requisiciones, setRequisiciones] = useState([]);
+  const [cargandoReq, setCargandoReq] = useState(false);
+  const [modalNuevaReq, setModalNuevaReq] = useState(false);
+  const [exitoReq, setExitoReq] = useState(null);
 
   const noLeidas = notificaciones.filter(n => !n.leida).length;
   const solMedPendientes = solicitudesMed.filter(s => s.estado === "pendiente").length;
@@ -860,6 +972,7 @@ export default function JefeMedico() {
     if (seccionActiva === "personal") cargarPersonal();
     if (seccionActiva === "solicitudes") cargarSolicitudes();
     if (seccionActiva === "solicitudes-med") cargarSolicitudesMed();
+    if (seccionActiva === "requisiciones") cargarRequisiciones();
   }, [seccionActiva]);
 
   const cargarDashboard = async () => {
@@ -889,6 +1002,14 @@ export default function JefeMedico() {
 
   const cargarSolicitudesMed = async () => {
     try { setCargandoSolMed(true); const data = await obtenerSolicitudesMedicamento(); setSolicitudesMed(Array.isArray(data) ? data : []); } catch (e) { console.error(e); } finally { setCargandoSolMed(false); }
+  };
+
+  const cargarRequisiciones = async () => {
+    try {
+      setCargandoReq(true);
+      const data = await fetch("http://localhost:3000/medico/requisiciones").then(r => r.json());
+      setRequisiciones(Array.isArray(data) ? data : []);
+    } catch (e) { console.error(e); } finally { setCargandoReq(false); }
   };
 
   const handleToggleControlado = async (med) => {
@@ -1278,6 +1399,60 @@ export default function JefeMedico() {
                       <button className="jefe-btn-aprobar" onClick={() => setModalResolver({ sol: s, decision: "aprobado" })}>✅ Aprobar</button>
                       <button className="jefe-btn-rechazar" onClick={() => setModalResolver({ sol: s, decision: "rechazado" })}>❌ Rechazar</button>
                     </div>
+                  </div>
+                ))}
+            </>
+          )}
+          {/* REQUISICIONES */}
+          {seccionActiva === "requisiciones" && (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+                <div>
+                  <h1 className="jefe-page-title">Requisiciones</h1>
+                  <p className="jefe-page-subtitle">Solicitudes de medicamentos e insumos a administración</p>
+                </div>
+                <button className="jefe-btn-primary" onClick={() => setModalNuevaReq(true)}>➕ Nueva Requisición</button>
+              </div>
+              {exitoReq && <div className="jefe-success">{exitoReq}</div>}
+
+              {/* MODAL NUEVA REQUISICIÓN */}
+              {modalNuevaReq && (
+                <ModalNuevaRequisicion
+                  usuario={usuario}
+                  medicamentos={medicamentos}
+                  onClose={() => setModalNuevaReq(false)}
+                  onExito={(msg) => { setExitoReq(msg); cargarRequisiciones(); setTimeout(() => setExitoReq(null), 5000); }}
+                />
+              )}
+
+              {cargandoReq ? <div className="jefe-card"><div className="jefe-loading">Cargando requisiciones...</div></div>
+                : requisiciones.length === 0 ? <div className="jefe-card"><div className="jefe-empty">No hay requisiciones registradas</div></div>
+                : requisiciones.map((r, i) => (
+                  <div key={i} style={{ background: "#fff", border: "1px solid #e8eef5", borderRadius: 10, padding: 16, marginBottom: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: "#0f1e3d" }}>
+                          {r.tipo === "medicamento" ? "💊" : "🩺"} {r.descripcion}
+                        </div>
+                        <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>
+                          {r.nombre_jefe} • {r.fecha ? new Date(r.fecha).toLocaleDateString("es-MX") : "—"}
+                        </div>
+                      </div>
+                      <span style={{
+                        fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20,
+                        background: r.estado === "aprobado" ? "#d1fae5" : r.estado === "rechazado" ? "#fee2e2" : "#fef9c3",
+                        color: r.estado === "aprobado" ? "#059669" : r.estado === "rechazado" ? "#dc2626" : "#ca8a04"
+                      }}>
+                        {r.estado === "aprobado" ? "✅ Aprobado" : r.estado === "rechazado" ? "❌ Rechazado" : "⏳ Pendiente"}
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", gap: 20, fontSize: 12, color: "#6b7280", flexWrap: "wrap" }}>
+                      <span>Cantidad: <strong>{r.cantidad} {r.unidad || ""}</strong></span>
+                      <span>Tipo: <strong>{r.tipo === "medicamento" ? "Medicamento" : "Insumo"}</strong></span>
+                      {r.nombre_medicamento_ref && <span>Ref: <strong>{r.nombre_medicamento_ref}</strong></span>}
+                    </div>
+                    {r.motivo && <div style={{ fontSize: 12, color: "#374151", marginTop: 8, padding: "6px 10px", background: "#f9fafb", borderRadius: 6 }}>💬 {r.motivo}</div>}
+                    {r.respuesta && <div style={{ fontSize: 12, color: r.estado === "aprobado" ? "#059669" : "#dc2626", marginTop: 8 }}>📋 Respuesta: {r.respuesta}</div>}
                   </div>
                 ))}
             </>

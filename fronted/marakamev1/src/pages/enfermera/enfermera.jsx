@@ -14,6 +14,7 @@ import Indicaciones from "../medico/Indicaciones";
 import Desintoxicacion from "../medico/Desintoxicacion";
 import Evolucion from "../medico/Evolucion";
 import Laboratorio from "../medico/Laboratorio";
+import IndicacionesEnfermera from "./IndicacionesEnfermera";
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -49,7 +50,8 @@ const styles = `
   .enf-sidebar-footer-info h4 { color: #fff; font-size: 12px; font-weight: 600; }
   .enf-sidebar-footer-info p { color: rgba(255,255,255,0.4); font-size: 10px; }
 
-  .enf-logout-btn { display: flex; align-items: center; gap: 8px; padding: 8px 12px; color: #fff; font-size: 12px; cursor: pointer; background: #7c3aed; border: none; border-radius: 6px; font-family: 'Inter', sans-serif; width: 100%; transition: all 0.15s; }  .enf-logout-btn:hover { background: rgba(239,68,68,0.25); color: #fca5a5; border-color: rgba(239,68,68,0.4); }
+  .enf-logout-btn { display: flex; align-items: center; gap: 8px; padding: 8px 12px; color: rgba(255,255,255,0.6); font-size: 12px; cursor: pointer; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; font-family: 'Inter', sans-serif; width: 100%; transition: all 0.15s; }
+  .enf-logout-btn:hover { background: rgba(239,68,68,0.25); color: #fca5a5; border-color: rgba(239,68,68,0.4); }
   .enf-logout-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
 
   .enf-topbar { background: #4c1d95; position: fixed; top: 0; left: 0; right: 0; height: 36px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; z-index: 200; }
@@ -121,6 +123,7 @@ const styles = `
 const NAV_ITEMS = [
   { id: "dashboard", label: "Inicio", icon: "chart" },
   { id: "pacientes", label: "Pacientes", icon: "users" },
+  { id: "administracion", label: "Administración Meds", icon: "syringe" },
   { id: "diagnostico", label: "Diagnóstico", icon: "file" },
   { id: "indicaciones", label: "Indicaciones", icon: "pill" },
   { id: "desintoxicacion", label: "Desintoxicación", icon: "drop" },
@@ -133,6 +136,7 @@ const ICONS = {
   users: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
   file: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>,
   pill: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.5 20H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H20a2 2 0 0 1 2 2v2"/><circle cx="18" cy="18" r="4"/><path d="m15.5 15.5 5 5"/></svg>,
+  syringe: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m18 2 4 4"/><path d="m17 7 3-3"/><path d="M19 9 8.7 19.3c-1 1-2.5 1-3.4 0l-.6-.6c-1-1-1-2.5 0-3.4L15 5"/><path d="m9 11 4 4"/><path d="m5 19-3 3"/><path d="m14 4 6 6"/></svg>,
   drop: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg>,
   activity: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
   flask: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 3h6l1 9H8L9 3z"/><path d="M6.5 21a5 5 0 0 0 11 0c0-3-2.5-5.5-5.5-8.5C9 15.5 6.5 18 6.5 21z"/></svg>,
@@ -363,6 +367,7 @@ export default function Enfermera() {
 
           {seccionActiva === "pacientes" && <Pacientes onVerExpediente={handleVerExpediente} />}
           {seccionActiva === "expediente" && pacienteActivo && <Expediente id_paciente={pacienteActivo} onVolver={() => setSeccionActiva("pacientes")} onNavegar={handleNav} />}
+          {seccionActiva === "administracion" && <IndicacionesEnfermera usuario={usuario} />}
           {seccionActiva === "diagnostico" && <Diagnostico rol="enfermera" />}
           {seccionActiva === "indicaciones" && <Indicaciones rol="enfermera" />}
           {seccionActiva === "desintoxicacion" && <Desintoxicacion rol="enfermera" />}

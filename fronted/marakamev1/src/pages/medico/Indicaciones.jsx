@@ -102,7 +102,7 @@ export default function Indicaciones({ rol }) {
   const [busquedaMed, setBusquedaMed] = useState("");
   const [resultadosMed, setResultadosMed] = useState([]);
   const [medSeleccionado, setMedSeleccionado] = useState(null);
-  const [medForm, setMedForm] = useState({ dosis: "", frecuencia: "", duracion: "", via: "" });
+  const [medForm, setMedForm] = useState({ dosis: "", frecuencia_horas: "", duracion_dias: "", via: "" });
   const [erroresMed, setErroresMed] = useState({});
   const [alertaMed, setAlertaMed] = useState(null);
 
@@ -185,11 +185,11 @@ export default function Indicaciones({ rol }) {
     setResultadosMed([]);
     setAlertaMed(null);
 
-    // Precargar vía si tiene presentación
-    const viaMap = { Ampolleta: "IV", Jarabe: "VO", Cápsula: "VO", Tableta: "VO", Solución: "IV", Crema: "Tópica" };
+    // Prellenar solo presentación+concentración como dosis y vía según presentación
+    const viaMap = { Ampolleta: "IV", Jarabe: "VO", Cápsula: "VO", Tableta: "VO", Solución: "IV", Crema: "Tópica", Parche: "Tópica", Supositorio: "Rectal", Polvo: "VO" };
     const via = viaMap[med.presentacion] || "";
-    setMedForm(prev => ({ ...prev, via }));
-
+    const dosis = [med.presentacion, med.concentracion].filter(Boolean).join(" ");
+    setMedForm(prev => ({ ...prev, via, dosis }));
     if (med.es_controlado) {
       setAlertaMed({ tipo: "controlado", msg: "⚠️ Medicamento controlado — la solicitud requerirá aprobación del jefe médico." });
     } else if (med.stock_actual <= 0) {
@@ -201,7 +201,8 @@ export default function Indicaciones({ rol }) {
     const e = {};
     if (!medSeleccionado && !busquedaMed.trim()) e.nombre = "Selecciona o escribe un medicamento";
     if (!medForm.dosis) e.dosis = "Requerido";
-    if (!medForm.frecuencia) e.frecuencia = "Requerido";
+    if (!medForm.frecuencia_horas || isNaN(medForm.frecuencia_horas) || Number(medForm.frecuencia_horas) <= 0) e.frecuencia_horas = "Requerido (número de horas)";
+    if (!medForm.duracion_dias || isNaN(medForm.duracion_dias) || Number(medForm.duracion_dias) <= 0) e.duracion_dias = "Requerido (número de días)";
     if (!medForm.via) e.via = "Requerido";
     setErroresMed(e);
     return Object.keys(e).length === 0;
@@ -214,10 +215,24 @@ export default function Indicaciones({ rol }) {
     const sinStock = esMedCatalogo && medSeleccionado.stock_actual <= 0;
     const esControlado = esMedCatalogo && medSeleccionado.es_controlado;
 
+    const frecuenciaHoras = parseInt(medForm.frecuencia_horas);
+    const duracionDias = parseInt(medForm.duracion_dias);
+    const totalDosis = Math.ceil((duracionDias * 24) / frecuenciaHoras);
+    const fechaInicio = new Date();
+    const fechaFin = new Date(fechaInicio.getTime() + duracionDias * 24 * 60 * 60 * 1000);
+
     const nuevo = {
       id_medicamento: medSeleccionado?.id_medicamento || null,
       nombre: medSeleccionado ? medSeleccionado.nombre : busquedaMed.trim(),
-      ...medForm,
+      dosis: medForm.dosis,
+      frecuencia: `Cada ${frecuenciaHoras}h`,
+      frecuencia_horas: frecuenciaHoras,
+      duracion: `${duracionDias} día${duracionDias > 1 ? "s" : ""}`,
+      duracion_dias: duracionDias,
+      total_dosis: totalDosis,
+      fecha_inicio: fechaInicio.toISOString(),
+      fecha_fin: fechaFin.toISOString(),
+      via: medForm.via,
       es_controlado: esControlado,
       es_externo: sinStock || !esMedCatalogo,
       stock_actual: medSeleccionado?.stock_actual || 0,
@@ -227,7 +242,7 @@ export default function Indicaciones({ rol }) {
     setMedicamentosAgregados([...medicamentosAgregados, nuevo]);
     setMedSeleccionado(null);
     setBusquedaMed("");
-    setMedForm({ dosis: "", frecuencia: "", duracion: "", via: "" });
+    setMedForm({ dosis: "", frecuencia_horas: "", duracion_dias: "", via: "" });
     setErroresMed({});
     setAlertaMed(null);
   };
@@ -260,7 +275,12 @@ export default function Indicaciones({ rol }) {
           nombre: m.nombre,
           dosis: m.dosis,
           frecuencia: m.frecuencia,
+          frecuencia_horas: m.frecuencia_horas,
           duracion: m.duracion,
+          duracion_dias: m.duracion_dias,
+          total_dosis: m.total_dosis,
+          fecha_inicio: m.fecha_inicio,
+          fecha_fin: m.fecha_fin,
           via: m.via,
           requiere_receta: m.es_controlado,
         }))
@@ -456,13 +476,23 @@ export default function Indicaciones({ rol }) {
                   </div>
                   <div className="ind-field">
                     <label className="ind-label">Dosis *</label>
-                    <input className={`ind-input ${erroresMed.dosis ? "error" : ""}`} placeholder="ej. 500mg" value={medForm.dosis} onChange={e => setMedForm({ ...medForm, dosis: e.target.value })} />
+                    <input className={`ind-input ${erroresMed.dosis ? "error" : ""}`} placeholder="ej. Tableta 500mg" value={medForm.dosis} onChange={e => setMedForm({ ...medForm, dosis: e.target.value })} />
                     {erroresMed.dosis && <span className="ind-error-msg">{erroresMed.dosis}</span>}
                   </div>
                   <div className="ind-field">
-                    <label className="ind-label">Frecuencia *</label>
-                    <input className={`ind-input ${erroresMed.frecuencia ? "error" : ""}`} placeholder="ej. Cada 8h" value={medForm.frecuencia} onChange={e => setMedForm({ ...medForm, frecuencia: e.target.value })} />
-                    {erroresMed.frecuencia && <span className="ind-error-msg">{erroresMed.frecuencia}</span>}
+                    <label className="ind-label">Frecuencia — cada cuántas horas *</label>
+                    <input className={`ind-input ${erroresMed.frecuencia_horas ? "error" : ""}`} type="number" min="1" placeholder="ej. 8 (cada 8 horas)" value={medForm.frecuencia_horas} onChange={e => setMedForm({ ...medForm, frecuencia_horas: e.target.value })} />
+                    {erroresMed.frecuencia_horas && <span className="ind-error-msg">{erroresMed.frecuencia_horas}</span>}
+                    {medForm.frecuencia_horas && medForm.duracion_dias && (
+                      <span style={{ fontSize: 11, color: "#059669", marginTop: 2 }}>
+                        Total: {Math.ceil((parseInt(medForm.duracion_dias) * 24) / parseInt(medForm.frecuencia_horas))} dosis
+                      </span>
+                    )}
+                  </div>
+                  <div className="ind-field">
+                    <label className="ind-label">Duración — número de días *</label>
+                    <input className={`ind-input ${erroresMed.duracion_dias ? "error" : ""}`} type="number" min="1" placeholder="ej. 3 (3 días)" value={medForm.duracion_dias} onChange={e => setMedForm({ ...medForm, duracion_dias: e.target.value })} />
+                    {erroresMed.duracion_dias && <span className="ind-error-msg">{erroresMed.duracion_dias}</span>}
                   </div>
                   <div className="ind-field">
                     <label className="ind-label">Vía *</label>
