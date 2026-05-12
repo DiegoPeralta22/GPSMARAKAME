@@ -1016,3 +1016,78 @@ exports.marcarTodasLeidas = async (req, res) => {
     res.status(500).send("Error al marcar notificaciones");
   }
 };
+
+// ==================== HISTORIA MÉDICA ====================
+
+exports.guardarHistoriaMedica = async (req, res) => {
+  const { id_paciente, id_usuario, datos_json } = req.body;
+  try {
+    const pool = await poolPromise;
+    const existe = await pool.request()
+      .input('id_paciente', sql.Int, parseInt(id_paciente))
+      .query(`SELECT id_historia FROM HistoriaMedica WHERE id_paciente = @id_paciente`);
+    if (existe.recordset.length > 0) {
+      await pool.request()
+        .input('id_paciente', sql.Int, parseInt(id_paciente))
+        .input('id_usuario', sql.Int, id_usuario ? parseInt(id_usuario) : null)
+        .input('datos_json', sql.NVarChar(sql.MAX), datos_json || null)
+        .query(`UPDATE HistoriaMedica SET datos_json=@datos_json, id_usuario=@id_usuario, fecha_actualizacion=GETDATE() WHERE id_paciente=@id_paciente`);
+      res.json({ ok: true });
+    } else {
+      const r = await pool.request()
+        .input('id_paciente', sql.Int, parseInt(id_paciente))
+        .input('id_usuario', sql.Int, id_usuario ? parseInt(id_usuario) : null)
+        .input('datos_json', sql.NVarChar(sql.MAX), datos_json || null)
+        .query(`INSERT INTO HistoriaMedica (id_paciente, id_usuario, datos_json) OUTPUT INSERTED.id_historia VALUES (@id_paciente, @id_usuario, @datos_json)`);
+      res.json({ ok: true, id_historia: r.recordset[0].id_historia });
+    }
+  } catch (error) {
+    console.log(error);
+    res.status(500).send("Error al guardar historia médica");
+  }
+};
+
+exports.subirFirmaHistoria = async (req, res) => {
+  const { id_paciente, id_usuario } = req.body;
+  const archivo = req.file;
+  if (!archivo) return res.status(400).send("No se subió ningún archivo");
+  try {
+    const pool = await poolPromise;
+    const ext = archivo.originalname.split('.').pop().toLowerCase();
+    const existe = await pool.request()
+      .input('id_paciente', sql.Int, parseInt(id_paciente))
+      .query(`SELECT id_historia FROM HistoriaMedica WHERE id_paciente = @id_paciente`);
+    if (existe.recordset.length > 0) {
+      await pool.request()
+        .input('id_paciente', sql.Int, parseInt(id_paciente))
+        .input('firma_archivo', sql.NVarChar(500), archivo.filename)
+        .input('firma_tipo', sql.NVarChar(10), ext)
+        .query(`UPDATE HistoriaMedica SET firma_archivo=@firma_archivo, firma_tipo=@firma_tipo, fecha_actualizacion=GETDATE() WHERE id_paciente=@id_paciente`);
+    } else {
+      await pool.request()
+        .input('id_paciente', sql.Int, parseInt(id_paciente))
+        .input('id_usuario', sql.Int, id_usuario ? parseInt(id_usuario) : null)
+        .input('firma_archivo', sql.NVarChar(500), archivo.filename)
+        .input('firma_tipo', sql.NVarChar(10), ext)
+        .query(`INSERT INTO HistoriaMedica (id_paciente, id_usuario, firma_archivo, firma_tipo) VALUES (@id_paciente, @id_usuario, @firma_archivo, @firma_tipo)`);
+    }
+    res.json({ archivo: archivo.filename });
+  } catch (error) {
+    console.log(error);
+    res.status(500).send("Error al subir firma");
+  }
+};
+
+exports.obtenerHistoriaMedica = async (req, res) => {
+  const { id_paciente } = req.params;
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .input('id_paciente', sql.Int, parseInt(id_paciente))
+      .query(`SELECT * FROM HistoriaMedica WHERE id_paciente = @id_paciente`);
+    res.json(result.recordset[0] || null);
+  } catch (error) {
+    console.log(error);
+    res.status(500).send("Error al obtener historia médica");
+  }
+};

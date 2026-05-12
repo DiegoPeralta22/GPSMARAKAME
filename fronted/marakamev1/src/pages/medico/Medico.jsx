@@ -15,6 +15,7 @@ import RecepcionPaciente from "./RecepcionPaciente";
 import Desintoxicacion from "./Desintoxicacion";
 import Indicaciones from "./Indicaciones";
 import Laboratorio from "./Laboratorio";
+import HistoriaMedica from "./HistoriaMedica";
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -112,7 +113,7 @@ const NAV_ITEMS = [
   { id: "val-ingreso", label: "Val. de Ingreso", icon: "bell" },
   { id: "recepcion", label: "Recepción 24h", icon: "heart" },
   { id: "valoracion", label: "Valoración", icon: "activity" },
-  { id: "diagnostico", label: "Diagnóstico", icon: "file" },
+  { id: "historia", label: "Historia Médica", icon: "file" },
   { id: "indicaciones", label: "Indicaciones", icon: "pill" },
   { id: "desintoxicacion", label: "Desintoxicación", icon: "drop" },
   { id: "evolucion", label: "Evolución", icon: "chart" },
@@ -133,7 +134,7 @@ const ICONS = {
   bell: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
 };
 
-const SECCIONES_LISTAS = ["dashboard", "pacientes", "expediente", "val-ingreso", "recepcion", "valoracion", "desintoxicacion", "indicaciones", "laboratorio"];
+const SECCIONES_LISTAS = ["dashboard", "pacientes", "expediente", "val-ingreso", "recepcion", "valoracion", "desintoxicacion", "indicaciones", "laboratorio", "historia"];
 
 function getNotifIconClass(tipo) {
   if (!tipo) return "info";
@@ -225,14 +226,23 @@ export default function Medico() {
   };
 
   const handleMarcarLeida = async (notif) => {
-    if (notif.leida) return;
-    try {
-      await marcarNotificacionLeida(notif.id_notificacion);
-      setNotificaciones(prev =>
-        prev.map(n => n.id_notificacion === notif.id_notificacion ? { ...n, leida: 1 } : n)
-      );
-    } catch (error) {
-      console.error(error);
+    if (!notif.leida) {
+      try {
+        await marcarNotificacionLeida(notif.id_notificacion);
+        setNotificaciones(prev =>
+          prev.map(n => n.id_notificacion === notif.id_notificacion ? { ...n, leida: 1 } : n)
+        );
+      } catch (error) {
+        console.error(error);
+      }
+    }
+    setPanelAbierto(false);
+    const tipo = notif.tipo || "";
+    const id = notif.id_referencia;
+    if (tipo === "cita_nueva" || tipo === "cita_actualizada" || tipo === "cita_llegada") {
+      handleNav("pacientes");
+    } else if (id) {
+      handleVerExpediente(id);
     }
   };
 
@@ -285,6 +295,7 @@ export default function Medico() {
              seccionActiva === "desintoxicacion" ? "Protocolo de Desintoxicación" :
              seccionActiva === "indicaciones" ? "Indicaciones Médicas" :
              seccionActiva === "laboratorio" ? "Solicitud de Laboratorio" :
+             seccionActiva === "historia" ? "Historia Médica" :
              NAV_ITEMS.find(n => n.id === seccionActiva)?.label || "Dashboard"}
           </span>
           {/* CAMPANA */}
@@ -484,6 +495,11 @@ export default function Medico() {
           {/* LABORATORIO */}
           {seccionActiva === "laboratorio" && (
             <Laboratorio rol={rol} />
+          )}
+
+          {/* HISTORIA MÉDICA */}
+          {seccionActiva === "historia" && (
+            <HistoriaMedica usuario={usuario} />
           )}
 
           {/* SECCIONES EN DESARROLLO */}

@@ -12,6 +12,11 @@ exports.subirContrato = async (req, res) => {
     await pool.request()
       .input('id_paciente', sql.Int, parseInt(id_paciente))
       .input('tipo', sql.NVarChar, tipo)
+      .query(`DELETE FROM Contrato WHERE id_paciente = @id_paciente AND tipo = @tipo`);
+
+    await pool.request()
+      .input('id_paciente', sql.Int, parseInt(id_paciente))
+      .input('tipo', sql.NVarChar, tipo)
       .input('contenido', sql.NVarChar, archivo.filename)
       .input('firmado', sql.Bit, 0)
       .query(`
@@ -47,24 +52,16 @@ exports.getPacientesAptos = async (req, res) => {
   try {
     await poolConnect;
 
-    let result;
-    try {
-      result = await pool.request().query(`
-        SELECT p.id_paciente, p.nombre, p.apellido, p.edad,
-               (SELECT TOP 1 fecha FROM DecisionIngreso WHERE id_paciente = p.id_paciente AND decision = 'aprobado' ORDER BY fecha DESC) as fecha_aprobacion,
-               (SELECT COUNT(*) FROM Contrato WHERE id_paciente = p.id_paciente) as num_contratos
-        FROM Paciente p
-        WHERE (SELECT TOP 1 decision FROM DecisionIngreso WHERE id_paciente = p.id_paciente ORDER BY fecha DESC) = 'aprobado'
-        ORDER BY p.id_paciente DESC
-      `);
-    } catch (e) {
-      result = await pool.request().query(`
-        SELECT p.id_paciente, p.nombre, p.apellido, p.edad,
-               NULL as fecha_aprobacion,
-               (SELECT COUNT(*) FROM Contrato WHERE id_paciente = p.id_paciente) as num_contratos
-        FROM Paciente p ORDER BY p.id_paciente DESC
-      `);
-    }
+    const result = await pool.request().query(`
+      SELECT p.id_paciente, p.nombre, p.apellido, p.edad,
+             d.fecha AS fecha_aprobacion,
+             ISNULL(ct.num_contratos, 0) AS num_contratos
+      FROM Paciente p
+      OUTER APPLY (SELECT TOP 1 decision, fecha FROM DecisionIngreso WHERE id_paciente=p.id_paciente ORDER BY fecha DESC) d
+      OUTER APPLY (SELECT COUNT(*) AS num_contratos FROM Contrato WHERE id_paciente=p.id_paciente) ct
+      WHERE d.decision = 'aprobado' AND ISNULL(p.archivado, 0) = 0
+      ORDER BY p.id_paciente DESC
+    `);
 
     res.json(result.recordset);
   } catch (error) {

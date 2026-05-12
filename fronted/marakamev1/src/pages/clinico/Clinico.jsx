@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import ExpedienteClinico from "../expediente/ExpedienteClinico";
+import RequisicionesClinico from "./RequisicionesClinico";
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -93,11 +94,12 @@ const IcoUsers = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor
 const IcoBell = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>;
 const IcoTruck = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>;
 const IcoFile = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="12" y2="17"/></svg>;
+const IcoCart = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>;
 
 const NAV_ITEMS = [
-  { id: "dashboard", label: "Inicio", Icon: IcoHome },
-  { id: "traslado", label: "Traslados", Icon: IcoTruck },
-  { id: "expediente", label: "Expediente", Icon: IcoFile },
+  { id: "traslado",     label: "Traslados",    Icon: IcoTruck },
+  { id: "expediente",   label: "Expediente",   Icon: IcoFile  },
+  { id: "requisicion",  label: "Requisiciones", Icon: IcoCart  },
 ];
 
 function formatFecha(fecha) {
@@ -111,7 +113,7 @@ function formatFecha(fecha) {
 }
 
 export default function Clinico() {
-  const [seccion, setSeccion] = useState("dashboard");
+  const [seccion, setSeccion] = useState("traslado");
   const [usuario, setUsuario] = useState(null);
   const [pacientes, setPacientes] = useState([]);
   const [cargando, setCargando] = useState(false);
@@ -211,11 +213,17 @@ export default function Clinico() {
   };
 
   const marcarLeida = async (n) => {
-    if (n.leida) return;
-    try {
-      await fetch(`http://localhost:3000/clinico/notificaciones/leer/${n.id_notificacion}`, { method: "POST" });
-      setNotifs(prev => prev.map(x => x.id_notificacion === n.id_notificacion ? { ...x, leida: 1 } : x));
-    } catch (e) { console.error(e); }
+    if (!n.leida) {
+      try {
+        await fetch(`http://localhost:3000/clinico/notificaciones/leer/${n.id_notificacion}`, { method: "POST" });
+        setNotifs(prev => prev.map(x => x.id_notificacion === n.id_notificacion ? { ...x, leida: 1 } : x));
+      } catch (e) { console.error(e); }
+    }
+    if (n.id_referencia && (n.tabla_referencia === 'Paciente' || n.tabla_referencia === 'Cuestionario')) {
+      setPanelNotif(false);
+      setPacienteExpediente({ id_paciente: n.id_referencia });
+      setSeccion("expediente");
+    }
   };
 
   const marcarTodas = async () => {
@@ -297,36 +305,6 @@ export default function Clinico() {
         {/* CONTENIDO */}
         <main className="cli-main">
 
-          {/* DASHBOARD */}
-          {seccion === "dashboard" && (
-            <>
-              <h1 className="cli-page-title">Inicio Clínico</h1>
-              <p className="cli-page-subtitle">Control de traslados e inventario de pertenencias</p>
-              <div className="cli-stats-grid">
-                <div className="cli-stat-card">
-                  <div className="cli-stat-num">{pendientes}</div>
-                  <div className="cli-stat-label">Traslados Pendientes</div>
-                </div>
-                <div className="cli-stat-card">
-                  <div className="cli-stat-num">{completados}</div>
-                  <div className="cli-stat-label">Traslados Realizados</div>
-                </div>
-                <div className="cli-stat-card">
-                  <div className="cli-stat-num">{pacientes.length}</div>
-                  <div className="cli-stat-label">Pacientes Aprobados</div>
-                </div>
-              </div>
-              {pendientes > 0 && (
-                <div className="cli-card" style={{ background: "#fff7ed", border: "1px solid #fbbf24" }}>
-                  <div style={{ fontWeight: 700, color: "#d97706", marginBottom: 6 }}>⚠ Tienes {pendientes} traslado{pendientes > 1 ? "s" : ""} pendiente{pendientes > 1 ? "s" : ""}</div>
-                  <button onClick={() => setSeccion("traslado")} style={{ background: "#d97706", color: "#fff", border: "none", borderRadius: 6, padding: "7px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-                    Ir a Traslados →
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-
           {/* TRASLADOS - LISTA */}
           {seccion === "traslado" && !seleccionado && (
             <>
@@ -390,6 +368,9 @@ export default function Clinico() {
               onVolver={() => setPacienteExpediente(null)}
             />
           )}
+
+          {/* REQUISICIONES */}
+          {seccion === "requisicion" && <RequisicionesClinico />}
 
           {/* TRASLADOS - FORMULARIO */}
           {seccion === "traslado" && seleccionado && (

@@ -1,6 +1,29 @@
 const express = require('express');
 const router = express.Router();
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const medico = require('../controllers/medico.controller');
+
+const historiasDir = path.join(__dirname, '../uploads/historias');
+if (!fs.existsSync(historiasDir)) fs.mkdirSync(historiasDir, { recursive: true });
+
+const storageHist = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, historiasDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `historia_${Date.now()}${ext}`);
+  }
+});
+
+const uploadHist = multer({
+  storage: storageHist,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ok = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'].includes(file.mimetype);
+    ok ? cb(null, true) : cb(new Error('Solo se permiten PDF, JPG o PNG'));
+  }
+});
 
 // Dashboard
 router.get('/estadisticas', medico.obtenerEstadisticas);
@@ -55,5 +78,10 @@ router.post('/valorar-ingreso', medico.valorarIngreso);
 router.get('/notificaciones/:id_usuario', medico.obtenerNotificaciones);
 router.put('/notificaciones/:id_notificacion/leida', medico.marcarLeida);
 router.put('/notificaciones/todas/:id_usuario/leidas', medico.marcarTodasLeidas);
+
+// Historia Médica (formulario + firma)
+router.get('/historia-medica/:id_paciente', medico.obtenerHistoriaMedica);
+router.post('/historia-medica/guardar', medico.guardarHistoriaMedica);
+router.post('/historia-medica/firma', uploadHist.single('archivo'), medico.subirFirmaHistoria);
 
 module.exports = router;

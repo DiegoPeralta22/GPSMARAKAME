@@ -142,20 +142,27 @@ export default function Contratos() {
 
   const sidebar = (
     <div className="adm-sidebar">
-      <h2>MARAKAME</h2>
-      <p className="user">ADMISIONES: {usuario.nombre || "—"}</p>
-      <ul>
-        <li onClick={() => navigate("/")}><IcoGrid />Inicio</li>
-        <li onClick={() => navigate("/admisiones")}><IcoHome />Admisiones</li>
-        <li onClick={() => navigate("/pacientes")}><IcoUsers />Pacientes</li>
-        <li onClick={() => navigate("/registro")}><IcoUser />Agregar Paciente</li>
-        <li onClick={() => navigate("/historial")}><IcoFile />Historial clínico</li>
-        <li onClick={() => navigate("/estudio")}><IcoMoney />Estudio Socioeconómico</li>
-        <li onClick={() => navigate("/citas")}><IcoCal />Agenda de Citas</li>
-        <li onClick={() => navigate("/validacion")}><IcoShield />Validación de Ingreso</li>
-        <li className="active"><IcoDoc />Contratos</li>
-        <li onClick={() => navigate("/expedientes")}><IcoFolder />Expedientes</li>
-      </ul>
+      <div className="adm-sidebar-top">
+        <h2>MARAKAME</h2>
+        <p className="user">ADMISIONES: {usuario.nombre || "—"}</p>
+      </div>
+      <nav>
+        <ul>
+          <li onClick={() => navigate("/")}><IcoGrid />Inicio</li>
+          <li onClick={() => navigate("/admisiones")}><IcoHome />Admisiones</li>
+          <li onClick={() => navigate("/pacientes")}><IcoUsers />Pacientes</li>
+          <li onClick={() => navigate("/registro")}><IcoUser />Preregistro</li>
+          <li onClick={() => navigate("/historial")}><IcoFile />Historial clínico</li>
+          <li onClick={() => navigate("/estudio")}><IcoMoney />Estudio Socioeconómico</li>
+          <li onClick={() => navigate("/citas")}><IcoCal />Agenda de Citas</li>
+          <li onClick={() => navigate("/validacion")}><IcoShield />Validación de Ingreso</li>
+          <li className="active"><IcoDoc />Contratos</li>
+          <li onClick={() => navigate("/expedientes")}><IcoFolder />Expedientes</li>
+        </ul>
+      </nav>
+      <div className="adm-sidebar-bottom">
+        <button className="adm-btn" onClick={() => navigate("/registro")}>+ Registro de Paciente</button>
+      </div>
     </div>
   );
 

@@ -1,4 +1,4 @@
-.est-layout { max-width: 900px; margin: 0 auto; padding: 24px; font-family: 'Segoe UI', sans-serif; color: #374151; }
+.est-layout { padding: 24px; font-family: 'Segoe UI', sans-serif; color: #374151; }
 
 .est-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
 .est-header-left { display: flex; gap: 16px; align-items: center; }
@@ -70,7 +70,12 @@
 .est-btn-sig { padding: 10px 24px; background: #0b5d5b; color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
 
 @media print {
-  .adm-sidebar, .est-sidebar, .est-steps, .est-nav, .est-btn-borrador, .est-btn-save, .adm-sidebar-bottom { display: none !important; }
+  .adm-sidebar, .est-sidebar, .est-steps, .est-nav, .est-btn-borrador,
+  .est-btn-save, .adm-sidebar-bottom, .header, .adm-topbar,
+  .est-footer-actions, .est-btn-cancel, .est-btn-ant, .est-btn-sig,
+  button { display: none !important; }
+  .dashboard { display: block !important; }
+  .main { margin: 0 !important; padding: 0 !important; width: 100% !important; }
   .est-layout { max-width: 100%; padding: 12px; margin: 0; }
   .est-header { border-bottom: 2px solid #0b5d5b; margin-bottom: 14px; padding-bottom: 10px; }
   .est-card { box-shadow: none; border: 1px solid #ccc; break-inside: avoid; margin-bottom: 10px; }

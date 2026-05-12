@@ -20,7 +20,7 @@ export default function Director() {
           <ul>
             <li className="active">Inicio</li>
             <li onClick={() => navigate("/admisiones")}>Admisiones</li>
-            <li onClick={() => navigate("/registro")}>Agregar Paciente</li>
+            <li onClick={() => navigate("/registro")}>Preregistro</li>
             <li onClick={() => navigate("/historial")}>Historial clínico</li>
             <li onClick={() => navigate("/estudio")}>Estudio Socioeconómico</li>
             <li onClick={() => navigate("/citas")}>Agenda de Citas</li>
