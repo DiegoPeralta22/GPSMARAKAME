@@ -14,7 +14,7 @@ exports.obtenerEstadisticas = async (req, res) => {
     const result = await pool.request().query(`
       SELECT
         (SELECT COUNT(*) FROM Paciente) as total_pacientes,
-        (SELECT COUNT(*) FROM Expediente WHERE estado = 'tratamiento') as en_tratamiento,
+        (SELECT COUNT(*) FROM Expediente WHERE estado = 'activo') as en_tratamiento,
         (SELECT COUNT(*) FROM Expediente WHERE estado = 'desintoxicacion') as en_desintoxicacion,
         (SELECT COUNT(*) FROM ValoracionMedica WHERE apto IS NULL) as valoraciones_pendientes
     `);
@@ -62,7 +62,7 @@ exports.obtenerTareasPendientes = async (req, res) => {
         'normal' as prioridad
       FROM Paciente p
       INNER JOIN Expediente e ON p.id_paciente = e.id_paciente
-      WHERE e.estado = 'tratamiento'
+      WHERE e.estado = 'activo'
     `);
     res.json(result.recordset);
   } catch (error) {
@@ -180,34 +180,93 @@ exports.obtenerValoracion = async (req, res) => {
   }
 };
 
+// ==================== crearValoracionIndependiente ====================
+// APTO  → expediente en 'preingreso' + notifica a admisión
+// NO APTO → elimina todo rastro del paciente + notifica a admisión
+
 exports.crearValoracionIndependiente = async (req, res) => {
   const { id_paciente, id_usuario, fecha_valoracion, peso, altura, presion_arterial, frecuencia_cardiaca, temperatura, glucosa, sustancia_principal, tiempo_consumo, frecuencia_consumo, ultimo_consumo, riesgo, apto, observaciones, recomendaciones } = req.body;
   try {
     const pool = await poolPromise;
-    const valoracion = await pool.request()
-      .input('id_paciente', id_paciente).input('id_usuario', id_usuario).input('fecha_valoracion', fecha_valoracion)
-      .input('peso', peso).input('altura', altura).input('presion_arterial', presion_arterial)
-      .input('frecuencia_cardiaca', frecuencia_cardiaca).input('temperatura', temperatura).input('glucosa', glucosa)
-      .input('sustancia_principal', sustancia_principal).input('tiempo_consumo', tiempo_consumo)
-      .input('frecuencia_consumo', frecuencia_consumo).input('ultimo_consumo', ultimo_consumo)
-      .input('riesgo', riesgo).input('apto', apto).input('observaciones', observaciones).input('recomendaciones', recomendaciones)
-      .query(`
-        INSERT INTO ValoracionMedica (id_paciente, id_usuario, fecha_valoracion, peso, altura, presion_arterial, frecuencia_cardiaca, temperatura, glucosa, sustancia_principal, tiempo_consumo, frecuencia_consumo, ultimo_consumo, riesgo, apto, observaciones, recomendaciones)
-        OUTPUT INSERTED.id_valoracion
-        VALUES (@id_paciente, @id_usuario, @fecha_valoracion, @peso, @altura, @presion_arterial, @frecuencia_cardiaca, @temperatura, @glucosa, @sustancia_principal, @tiempo_consumo, @frecuencia_consumo, @ultimo_consumo, @riesgo, @apto, @observaciones, @recomendaciones)
-      `);
-    const id_valoracion = valoracion.recordset[0].id_valoracion;
+
     if (parseInt(apto) === 1) {
-      await pool.request().input('id_paciente', id_paciente).query(`INSERT INTO Expediente (id_paciente, estado) VALUES (@id_paciente, 'valoracion')`);
+      // ── APTO ──
+      const valoracion = await pool.request()
+        .input('id_paciente', id_paciente).input('id_usuario', id_usuario).input('fecha_valoracion', fecha_valoracion)
+        .input('peso', peso).input('altura', altura).input('presion_arterial', presion_arterial)
+        .input('frecuencia_cardiaca', frecuencia_cardiaca).input('temperatura', temperatura).input('glucosa', glucosa)
+        .input('sustancia_principal', sustancia_principal).input('tiempo_consumo', tiempo_consumo)
+        .input('frecuencia_consumo', frecuencia_consumo).input('ultimo_consumo', ultimo_consumo)
+        .input('riesgo', riesgo).input('apto', apto).input('observaciones', observaciones).input('recomendaciones', recomendaciones)
+        .query(`
+          INSERT INTO ValoracionMedica (id_paciente, id_usuario, fecha_valoracion, peso, altura, presion_arterial, frecuencia_cardiaca, temperatura, glucosa, sustancia_principal, tiempo_consumo, frecuencia_consumo, ultimo_consumo, riesgo, apto, observaciones, recomendaciones)
+          OUTPUT INSERTED.id_valoracion
+          VALUES (@id_paciente, @id_usuario, @fecha_valoracion, @peso, @altura, @presion_arterial, @frecuencia_cardiaca, @temperatura, @glucosa, @sustancia_principal, @tiempo_consumo, @frecuencia_consumo, @ultimo_consumo, @riesgo, @apto, @observaciones, @recomendaciones)
+        `);
+      const id_valoracion = valoracion.recordset[0].id_valoracion;
+
+      // Crear o actualizar expediente en 'preingreso'
+      const expExistente = await pool.request()
+        .input('id_paciente', id_paciente)
+        .query(`SELECT id_expediente FROM Expediente WHERE id_paciente = @id_paciente`);
+
+      if (expExistente.recordset.length > 0) {
+        await pool.request()
+          .input('id_paciente', id_paciente)
+          .query(`UPDATE Expediente SET estado = 'preingreso' WHERE id_paciente = @id_paciente`);
+      } else {
+        await pool.request()
+          .input('id_paciente', id_paciente)
+          .query(`INSERT INTO Expediente (id_paciente, estado) VALUES (@id_paciente, 'preingreso')`);
+      }
+
+      // Notificar a admisión
+      const admision = await pool.request().query(`SELECT id_usuario FROM Usuario WHERE rol = 'admision'`);
+      const mensaje = `El paciente ha sido valorado como APTO. Continuar con estudio socioeconómico y papeleo de preingreso.`;
+      for (const usuario of admision.recordset) {
+        await pool.request()
+          .input('id_usuario_destino', usuario.id_usuario)
+          .input('tipo', 'valoracion_apta')
+          .input('mensaje', mensaje)
+          .input('id_referencia', id_valoracion)
+          .query(`INSERT INTO Notificacion (id_usuario_destino, tipo, mensaje, id_referencia, tabla_referencia) VALUES (@id_usuario_destino, @tipo, @mensaje, @id_referencia, 'ValoracionMedica')`);
+      }
+
+      res.json({ id_valoracion, expediente_creado: true });
+
+    } else if (parseInt(apto) === 0) {
+      // ── NO APTO: eliminar todo rastro del paciente ──
+      await pool.request()
+        .input('id_paciente', id_paciente)
+        .query(`
+          DELETE rc FROM RespuestaCuestionario rc
+          INNER JOIN Cuestionario c ON rc.id_cuestionario = c.id_cuestionario
+          WHERE c.id_paciente = @id_paciente;
+
+          DELETE FROM Cuestionario WHERE id_paciente = @id_paciente;
+
+          DELETE FROM Familiar WHERE id_paciente = @id_paciente;
+
+          DELETE FROM ValoracionMedica WHERE id_paciente = @id_paciente;
+
+          DELETE FROM Paciente WHERE id_paciente = @id_paciente;
+        `);
+
+      // Notificar a admisión
+      const admision = await pool.request().query(`SELECT id_usuario FROM Usuario WHERE rol = 'admision'`);
+      const mensaje = `El paciente ha sido valorado como NO APTO para ingresar al tratamiento.`;
+      for (const usuario of admision.recordset) {
+        await pool.request()
+          .input('id_usuario_destino', usuario.id_usuario)
+          .input('tipo', 'valoracion_no_apta')
+          .input('mensaje', mensaje)
+          .input('id_referencia', 0)
+          .query(`INSERT INTO Notificacion (id_usuario_destino, tipo, mensaje, id_referencia, tabla_referencia) VALUES (@id_usuario_destino, @tipo, @mensaje, @id_referencia, 'ValoracionMedica')`);
+      }
+
+      res.json({ id_valoracion: null, expediente_creado: false });
     }
-    const admision = await pool.request().query(`SELECT id_usuario FROM Usuario WHERE rol = 'admision'`);
-    const mensaje = parseInt(apto) === 1 ? `El paciente ha sido valorado como APTO para ingresar al tratamiento.` : `El paciente ha sido valorado como NO APTO para ingresar al tratamiento.`;
-    const tipo = parseInt(apto) === 1 ? 'valoracion_apta' : 'valoracion_no_apta';
-    for (const usuario of admision.recordset) {
-      await pool.request().input('id_usuario_destino', usuario.id_usuario).input('tipo', tipo).input('mensaje', mensaje).input('id_referencia', id_valoracion)
-        .query(`INSERT INTO Notificacion (id_usuario_destino, tipo, mensaje, id_referencia, tabla_referencia) VALUES (@id_usuario_destino, @tipo, @mensaje, @id_referencia, 'ValoracionMedica')`);
-    }
-    res.json({ id_valoracion, expediente_creado: parseInt(apto) === 1 });
+
   } catch (error) {
     console.log(error);
     res.status(500).send("Error al crear valoración");
@@ -330,17 +389,11 @@ exports.crearIndicacion = async (req, res) => {
     if (medicamentos && medicamentos.length > 0) {
       for (const med of medicamentos) {
         await pool.request()
-          .input('id_indicacion', id_indicacion)
-          .input('nombre', med.nombre)
-          .input('dosis', med.dosis)
-          .input('frecuencia', med.frecuencia || null)
-          .input('frecuencia_horas', med.frecuencia_horas || null)
-          .input('duracion', med.duracion || null)
-          .input('duracion_dias', med.duracion_dias || null)
-          .input('total_dosis', med.total_dosis || null)
-          .input('fecha_inicio', med.fecha_inicio || null)
-          .input('fecha_fin', med.fecha_fin || null)
-          .input('via', med.via)
+          .input('id_indicacion', id_indicacion).input('nombre', med.nombre).input('dosis', med.dosis)
+          .input('frecuencia', med.frecuencia || null).input('frecuencia_horas', med.frecuencia_horas || null)
+          .input('duracion', med.duracion || null).input('duracion_dias', med.duracion_dias || null)
+          .input('total_dosis', med.total_dosis || null).input('fecha_inicio', med.fecha_inicio || null)
+          .input('fecha_fin', med.fecha_fin || null).input('via', med.via)
           .input('requiere_receta', med.requiere_receta ? 1 : 0)
           .query(`INSERT INTO IndicacionMedicamento (id_indicacion, nombre, dosis, frecuencia, frecuencia_horas, duracion, duracion_dias, total_dosis, fecha_inicio, fecha_fin, via, requiere_receta) VALUES (@id_indicacion, @nombre, @dosis, @frecuencia, @frecuencia_horas, @duracion, @duracion_dias, @total_dosis, @fecha_inicio, @fecha_fin, @via, @requiere_receta)`);
       }
@@ -727,11 +780,7 @@ exports.crearMedicamento = async (req, res) => {
       .input('unidad_empaque', unidad_empaque || null).input('cantidad_por_empaque', cantidad_por_empaque || null)
       .input('stock_minimo', stock_minimo || 5).input('es_controlado', es_controlado ? 1 : 0)
       .input('id_usuario', id_usuario).input('id_paciente_exclusivo', id_paciente_exclusivo || null)
-      .query(`
-        INSERT INTO Medicamento (tipo, nombre, descripcion, categoria, presentacion, concentracion, unidad_minima, unidad_empaque, cantidad_por_empaque, stock_minimo, es_controlado, id_usuario, id_paciente_exclusivo)
-        OUTPUT INSERTED.id_medicamento
-        VALUES (@tipo, @nombre, @descripcion, @categoria, @presentacion, @concentracion, @unidad_minima, @unidad_empaque, @cantidad_por_empaque, @stock_minimo, @es_controlado, @id_usuario, @id_paciente_exclusivo)
-      `);
+      .query(`INSERT INTO Medicamento (tipo, nombre, descripcion, categoria, presentacion, concentracion, unidad_minima, unidad_empaque, cantidad_por_empaque, stock_minimo, es_controlado, id_usuario, id_paciente_exclusivo) OUTPUT INSERTED.id_medicamento VALUES (@tipo, @nombre, @descripcion, @categoria, @presentacion, @concentracion, @unidad_minima, @unidad_empaque, @cantidad_por_empaque, @stock_minimo, @es_controlado, @id_usuario, @id_paciente_exclusivo)`);
     res.json(result.recordset[0]);
   } catch (error) {
     console.log(error);
@@ -745,25 +794,12 @@ exports.actualizarMedicamento = async (req, res) => {
   try {
     const pool = await poolPromise;
     await pool.request()
-      .input('id_medicamento', id_medicamento)
-      .input('tipo', tipo).input('nombre', nombre).input('descripcion', descripcion || null)
+      .input('id_medicamento', id_medicamento).input('tipo', tipo).input('nombre', nombre).input('descripcion', descripcion || null)
       .input('categoria', categoria || null).input('presentacion', presentacion || null)
       .input('concentracion', concentracion || null).input('unidad_minima', unidad_minima)
-      .input('unidad_empaque', unidad_empaque || null)
-      .input('cantidad_por_empaque', cantidad_por_empaque || null)
-      .input('stock_minimo', stock_minimo || 5)
-      .input('stock_actual', stock_actual || 0)
-      .input('es_controlado', es_controlado ? 1 : 0)
-      .query(`
-        UPDATE Medicamento SET
-          tipo = @tipo, nombre = @nombre, descripcion = @descripcion,
-          categoria = @categoria, presentacion = @presentacion,
-          concentracion = @concentracion, unidad_minima = @unidad_minima,
-          unidad_empaque = @unidad_empaque, cantidad_por_empaque = @cantidad_por_empaque,
-          stock_minimo = @stock_minimo, stock_actual = @stock_actual,
-          es_controlado = @es_controlado
-        WHERE id_medicamento = @id_medicamento
-      `);
+      .input('unidad_empaque', unidad_empaque || null).input('cantidad_por_empaque', cantidad_por_empaque || null)
+      .input('stock_minimo', stock_minimo || 5).input('stock_actual', stock_actual || 0).input('es_controlado', es_controlado ? 1 : 0)
+      .query(`UPDATE Medicamento SET tipo=@tipo, nombre=@nombre, descripcion=@descripcion, categoria=@categoria, presentacion=@presentacion, concentracion=@concentracion, unidad_minima=@unidad_minima, unidad_empaque=@unidad_empaque, cantidad_por_empaque=@cantidad_por_empaque, stock_minimo=@stock_minimo, stock_actual=@stock_actual, es_controlado=@es_controlado WHERE id_medicamento=@id_medicamento`);
     res.json({ mensaje: "Medicamento actualizado correctamente" });
   } catch (error) {
     console.log(error);
@@ -813,29 +849,22 @@ exports.obtenerMovimientos = async (req, res) => {
     const pool = await poolPromise;
     const result = await pool.request().input('id_medicamento', id_medicamento)
       .query(`
-        SELECT 
-          m.*, 
-          u.nombre as nombre_usuario,
-          -- Obtener paciente desde AdministracionMedicamento si es salida por administración
-          CASE 
+        SELECT m.*, u.nombre as nombre_usuario,
+          CASE
             WHEN m.motivo LIKE '%paciente%' OR m.motivo LIKE '%administrado%' THEN
-              (SELECT TOP 1 p.nombre + ' ' + p.apellido 
-               FROM AdministracionMedicamento am
+              (SELECT TOP 1 p.nombre + ' ' + p.apellido FROM AdministracionMedicamento am
                INNER JOIN IndicacionMedicamento im ON am.id_indicacion_med = im.id_medicamento
                INNER JOIN Indicaciones i ON im.id_indicacion = i.id_indicacion
                INNER JOIN Paciente p ON i.id_paciente = p.id_paciente
-               WHERE am.id_usuario_enfermera = m.id_usuario
-               ORDER BY am.fecha_hora DESC)
+               WHERE am.id_usuario_enfermera = m.id_usuario ORDER BY am.fecha_hora DESC)
             WHEN m.id_solicitud IS NOT NULL THEN
-              (SELECT TOP 1 p.nombre + ' ' + p.apellido 
-               FROM SolicitudMedicamento sm
-               INNER JOIN Paciente p ON sm.id_paciente = p.id_paciente
-               WHERE sm.id_solicitud = m.id_solicitud)
+              (SELECT TOP 1 p.nombre + ' ' + p.apellido FROM SolicitudMedicamento sm
+               INNER JOIN Paciente p ON sm.id_paciente = p.id_paciente WHERE sm.id_solicitud = m.id_solicitud)
             ELSE NULL
           END as nombre_paciente
-        FROM MovimientoMedicamento m 
-        INNER JOIN Usuario u ON m.id_usuario = u.id_usuario 
-        WHERE m.id_medicamento = @id_medicamento 
+        FROM MovimientoMedicamento m
+        INNER JOIN Usuario u ON m.id_usuario = u.id_usuario
+        WHERE m.id_medicamento = @id_medicamento
         ORDER BY m.fecha DESC
       `);
     res.json(result.recordset);
@@ -856,15 +885,11 @@ exports.obtenerSolicitudesMedicamento = async (req, res) => {
     if (estado) { where += " AND sm.estado = @estado"; request.input('estado', estado); }
     if (id_paciente) { where += " AND sm.id_paciente = @id_paciente"; request.input('id_paciente', id_paciente); }
     const result = await request.query(`
-      SELECT sm.*,
-             p.nombre as nombre_paciente, p.apellido as apellido_paciente,
-             u.nombre as nombre_medico,
+      SELECT sm.*, p.nombre as nombre_paciente, p.apellido as apellido_paciente, u.nombre as nombre_medico,
              m.presentacion, m.concentracion, m.unidad_minima,
              f.nombre as nombre_familiar, f.parentesco, f.telefono,
-             am.decision as decision_jefe, am.comentario as comentario_jefe,
-             uj.nombre as nombre_jefe,
-             em.fecha_entrega, em.id_usuario_enfermera,
-             ue.nombre as nombre_enfermera
+             am.decision as decision_jefe, am.comentario as comentario_jefe, uj.nombre as nombre_jefe,
+             em.fecha_entrega, em.id_usuario_enfermera, ue.nombre as nombre_enfermera
       FROM SolicitudMedicamento sm
       INNER JOIN Paciente p ON sm.id_paciente = p.id_paciente
       INNER JOIN Usuario u ON sm.id_usuario_medico = u.id_usuario
@@ -904,11 +929,7 @@ exports.crearSolicitudMedicamento = async (req, res) => {
       .input('procedencia', procedencia || null).input('farmacia_lugar', farmacia_lugar || null)
       .input('fecha_entrega_estimada', fecha_entrega_estimada || null)
       .input('estado', estadoInicial).input('observaciones', observaciones || null)
-      .query(`
-        INSERT INTO SolicitudMedicamento (id_paciente, id_usuario_medico, id_medicamento, nombre_medicamento, dosis, cantidad, frecuencia, duracion, via, es_externo, es_controlado, exclusivo_paciente, procedencia, farmacia_lugar, fecha_entrega_estimada, estado, observaciones)
-        OUTPUT INSERTED.id_solicitud
-        VALUES (@id_paciente, @id_usuario_medico, @id_medicamento, @nombre_medicamento, @dosis, @cantidad, @frecuencia, @duracion, @via, @es_externo, @es_controlado, @exclusivo_paciente, @procedencia, @farmacia_lugar, @fecha_entrega_estimada, @estado, @observaciones)
-      `);
+      .query(`INSERT INTO SolicitudMedicamento (id_paciente, id_usuario_medico, id_medicamento, nombre_medicamento, dosis, cantidad, frecuencia, duracion, via, es_externo, es_controlado, exclusivo_paciente, procedencia, farmacia_lugar, fecha_entrega_estimada, estado, observaciones) OUTPUT INSERTED.id_solicitud VALUES (@id_paciente, @id_usuario_medico, @id_medicamento, @nombre_medicamento, @dosis, @cantidad, @frecuencia, @duracion, @via, @es_externo, @es_controlado, @exclusivo_paciente, @procedencia, @farmacia_lugar, @fecha_entrega_estimada, @estado, @observaciones)`);
     const id_solicitud = result.recordset[0].id_solicitud;
     const pacRes = await pool.request().input('id', id_paciente).query(`SELECT nombre, apellido FROM Paciente WHERE id_paciente = @id`);
     const pac = pacRes.recordset[0];
@@ -1062,12 +1083,9 @@ exports.obtenerPacientesClinico = async (req, res) => {
       request.input('busqueda', `%${busqueda}%`);
     }
     const result = await request.query(`
-      SELECT 
-        p.id_paciente, p.nombre, p.apellido, p.edad, p.genero, p.telefono,
-        e.id_expediente, e.estado,
-        DATEDIFF(day, e.fecha_apertura, GETDATE()) as dias_tratamiento,
-        f.nombre as contacto_nombre, f.parentesco as contacto_parentesco, 
-        f.telefono as contacto_telefono
+      SELECT p.id_paciente, p.nombre, p.apellido, p.edad, p.genero, p.telefono,
+        e.id_expediente, e.estado, DATEDIFF(day, e.fecha_apertura, GETDATE()) as dias_tratamiento,
+        f.nombre as contacto_nombre, f.parentesco as contacto_parentesco, f.telefono as contacto_telefono
       FROM Paciente p
       INNER JOIN Expediente e ON p.id_paciente = e.id_paciente
       LEFT JOIN Familiar f ON p.id_paciente = f.id_paciente
@@ -1086,13 +1104,7 @@ exports.obtenerNotasClinicas = async (req, res) => {
   try {
     const pool = await poolPromise;
     const result = await pool.request().input('id_paciente', id_paciente)
-      .query(`
-        SELECT nc.*, u.nombre as nombre_clinico
-        FROM NotaClinica nc
-        INNER JOIN Usuario u ON nc.id_usuario = u.id_usuario
-        WHERE nc.id_paciente = @id_paciente
-        ORDER BY nc.fecha DESC, nc.hora DESC
-      `);
+      .query(`SELECT nc.*, u.nombre as nombre_clinico FROM NotaClinica nc INNER JOIN Usuario u ON nc.id_usuario = u.id_usuario WHERE nc.id_paciente = @id_paciente ORDER BY nc.fecha DESC, nc.hora DESC`);
     res.json(result.recordset);
   } catch (error) {
     console.log(error);
@@ -1101,69 +1113,27 @@ exports.obtenerNotasClinicas = async (req, res) => {
 };
 
 exports.crearNotaClinica = async (req, res) => {
-  const {
-    id_paciente, id_usuario, rol_clinico, fecha, hora,
-    estado_general, observaciones_generales, acuerdos_compromisos, seguimiento_requerido,
-    // Psicólogo
-    tecnica_utilizada, estado_emocional, avance_terapeutico,
-    // Consejero
-    tema_tratado, nivel_motivacion, acuerdos_consejeria,
-    // Terapeuta Grupo
-    dinamica_grupal, participacion, cohesion_grupo,
-    // Terapeuta Familiar
-    tipo_visita, actitud_familiar, observaciones_visita,
-    // Notificación
-    notificar_medico, motivo_notificacion
-  } = req.body;
+  const { id_paciente, id_usuario, rol_clinico, fecha, hora, estado_general, observaciones_generales, acuerdos_compromisos, seguimiento_requerido, tecnica_utilizada, estado_emocional, avance_terapeutico, tema_tratado, nivel_motivacion, acuerdos_consejeria, dinamica_grupal, participacion, cohesion_grupo, tipo_visita, actitud_familiar, observaciones_visita, notificar_medico, motivo_notificacion } = req.body;
   try {
     const pool = await poolPromise;
     const result = await pool.request()
-      .input('id_paciente', id_paciente)
-      .input('id_usuario', id_usuario)
-      .input('rol_clinico', rol_clinico)
-      .input('fecha', fecha)
-      .input('hora', hora)
-      .input('estado_general', estado_general)
-      .input('observaciones_generales', observaciones_generales || null)
-      .input('acuerdos_compromisos', acuerdos_compromisos || null)
+      .input('id_paciente', id_paciente).input('id_usuario', id_usuario).input('rol_clinico', rol_clinico)
+      .input('fecha', fecha).input('hora', hora).input('estado_general', estado_general)
+      .input('observaciones_generales', observaciones_generales || null).input('acuerdos_compromisos', acuerdos_compromisos || null)
       .input('seguimiento_requerido', seguimiento_requerido ? 1 : 0)
-      .input('tecnica_utilizada', tecnica_utilizada || null)
-      .input('estado_emocional', estado_emocional || null)
-      .input('avance_terapeutico', avance_terapeutico || null)
-      .input('tema_tratado', tema_tratado || null)
-      .input('nivel_motivacion', nivel_motivacion || null)
-      .input('acuerdos_consejeria', acuerdos_consejeria || null)
-      .input('dinamica_grupal', dinamica_grupal || null)
-      .input('participacion', participacion || null)
-      .input('cohesion_grupo', cohesion_grupo || null)
-      .input('tipo_visita', tipo_visita || null)
-      .input('actitud_familiar', actitud_familiar || null)
-      .input('observaciones_visita', observaciones_visita || null)
-      .input('notificar_medico', notificar_medico ? 1 : 0)
-      .input('motivo_notificacion', motivo_notificacion || null)
+      .input('tecnica_utilizada', tecnica_utilizada || null).input('estado_emocional', estado_emocional || null)
+      .input('avance_terapeutico', avance_terapeutico || null).input('tema_tratado', tema_tratado || null)
+      .input('nivel_motivacion', nivel_motivacion || null).input('acuerdos_consejeria', acuerdos_consejeria || null)
+      .input('dinamica_grupal', dinamica_grupal || null).input('participacion', participacion || null)
+      .input('cohesion_grupo', cohesion_grupo || null).input('tipo_visita', tipo_visita || null)
+      .input('actitud_familiar', actitud_familiar || null).input('observaciones_visita', observaciones_visita || null)
+      .input('notificar_medico', notificar_medico ? 1 : 0).input('motivo_notificacion', motivo_notificacion || null)
       .query(`
-        INSERT INTO NotaClinica (
-          id_paciente, id_usuario, rol_clinico, fecha, hora,
-          estado_general, observaciones_generales, acuerdos_compromisos, seguimiento_requerido,
-          tecnica_utilizada, estado_emocional, avance_terapeutico,
-          tema_tratado, nivel_motivacion, acuerdos_consejeria,
-          dinamica_grupal, participacion, cohesion_grupo,
-          tipo_visita, actitud_familiar, observaciones_visita,
-          notificar_medico, motivo_notificacion
-        )
+        INSERT INTO NotaClinica (id_paciente, id_usuario, rol_clinico, fecha, hora, estado_general, observaciones_generales, acuerdos_compromisos, seguimiento_requerido, tecnica_utilizada, estado_emocional, avance_terapeutico, tema_tratado, nivel_motivacion, acuerdos_consejeria, dinamica_grupal, participacion, cohesion_grupo, tipo_visita, actitud_familiar, observaciones_visita, notificar_medico, motivo_notificacion)
         OUTPUT INSERTED.id_nota
-        VALUES (
-          @id_paciente, @id_usuario, @rol_clinico, @fecha, @hora,
-          @estado_general, @observaciones_generales, @acuerdos_compromisos, @seguimiento_requerido,
-          @tecnica_utilizada, @estado_emocional, @avance_terapeutico,
-          @tema_tratado, @nivel_motivacion, @acuerdos_consejeria,
-          @dinamica_grupal, @participacion, @cohesion_grupo,
-          @tipo_visita, @actitud_familiar, @observaciones_visita,
-          @notificar_medico, @motivo_notificacion
-        )
+        VALUES (@id_paciente, @id_usuario, @rol_clinico, @fecha, @hora, @estado_general, @observaciones_generales, @acuerdos_compromisos, @seguimiento_requerido, @tecnica_utilizada, @estado_emocional, @avance_terapeutico, @tema_tratado, @nivel_motivacion, @acuerdos_consejeria, @dinamica_grupal, @participacion, @cohesion_grupo, @tipo_visita, @actitud_familiar, @observaciones_visita, @notificar_medico, @motivo_notificacion)
       `);
     const id_nota = result.recordset[0].id_nota;
-
     if (notificar_medico) {
       try {
         const pacRes = await pool.request().input('id', id_paciente).query(`SELECT nombre, apellido FROM Paciente WHERE id_paciente = @id`);
@@ -1172,20 +1142,13 @@ exports.crearNotaClinica = async (req, res) => {
         const clinico = usuRes.recordset[0]?.nombre || "Área clínica";
         const rolLabel = { psicologo: "Psicólogo", consejero: "Consejero", terapeuta_grupo: "Terapeuta de Grupo", terapeuta_familiar: "Terapeuta Familiar" };
         const msg = `${rolLabel[rol_clinico] || rol_clinico} ${clinico} requiere asistencia médica para ${pac.nombre} ${pac.apellido}. Motivo: ${motivo_notificacion || "No especificado"}`;
-        const destinatarios = await pool.request().query(`
-          SELECT u.id_usuario FROM Usuario u
-          INNER JOIN Rol r ON u.id_rol = r.id_rol
-          WHERE r.nombre IN ('medico', 'jefe_medico')
-        `);
+        const destinatarios = await pool.request().query(`SELECT u.id_usuario FROM Usuario u INNER JOIN Rol r ON u.id_rol = r.id_rol WHERE r.nombre IN ('medico', 'jefe_medico')`);
         for (const dest of destinatarios.recordset) {
-          await pool.request()
-            .input('dest', dest.id_usuario).input('tipo', 'alerta_clinica')
-            .input('msg', msg).input('ref', id_nota)
+          await pool.request().input('dest', dest.id_usuario).input('tipo', 'alerta_clinica').input('msg', msg).input('ref', id_nota)
             .query(`INSERT INTO Notificacion (id_usuario_destino, tipo, mensaje, id_referencia, tabla_referencia) VALUES (@dest, @tipo, @msg, @ref, 'NotaClinica')`);
         }
       } catch (notifErr) { console.error("Error al enviar notificación clínica:", notifErr); }
     }
-
     res.json({ id_nota, notificacion_enviada: !!notificar_medico });
   } catch (error) {
     console.log(error);
@@ -1199,81 +1162,33 @@ exports.obtenerIndicacionesEnfermera = async (req, res) => {
   try {
     const pool = await poolPromise;
     const result = await pool.request().query(`
-      SELECT 
-        im.id_medicamento as id_indicacion_med,
-        im.id_indicacion,
-        im.nombre as nombre_medicamento,
-        im.dosis,
-        im.frecuencia,
-        im.frecuencia_horas,
-        im.duracion,
-        im.duracion_dias,
-        im.via,
-        im.total_dosis,
-        im.fecha_inicio,
-        im.fecha_fin,
-        im.requiere_receta,
-        i.fecha as fecha_indicacion,
-        i.id_paciente,
-        p.nombre as nombre_paciente,
-        p.apellido as apellido_paciente,
-        u.nombre as nombre_medico,
-        e.id_expediente,
-        e.estado as estado_paciente,
-        (SELECT COUNT(*) FROM AdministracionMedicamento am 
-         WHERE am.id_indicacion_med = im.id_medicamento) as dosis_administradas,
-        (SELECT TOP 1 CONVERT(varchar(19), am.fecha_hora, 120)
-         FROM AdministracionMedicamento am 
-         WHERE am.id_indicacion_med = im.id_medicamento 
-         ORDER BY am.fecha_hora DESC) as ultima_administracion,
-        (SELECT TOP 1 CONVERT(varchar(19), DATEADD(HOUR, im.frecuencia_horas, am.fecha_hora), 120)
-         FROM AdministracionMedicamento am 
-         WHERE am.id_indicacion_med = im.id_medicamento 
-         ORDER BY am.fecha_hora DESC) as proxima_dosis,
-        -- Aprobacion: si NO requiere receta siempre es 1
-        -- Si requiere receta, buscar si existe aprobacion con decision aprobado
-        CASE 
-          WHEN im.requiere_receta = 0 THEN 1
-          WHEN im.requiere_receta = 1 AND EXISTS (
-            SELECT 1 FROM SolicitudMedicamento sm
-            INNER JOIN AprobacionMedicamento ap ON sm.id_solicitud = ap.id_solicitud
-            WHERE sm.id_paciente = i.id_paciente
-              AND sm.nombre_medicamento = im.nombre
-              AND ap.decision = 'aprobado'
-          ) THEN 1
-          ELSE 0
-        END as aprobado_jefe,
-        -- Minutos restantes
-        CASE 
-          WHEN (SELECT COUNT(*) FROM AdministracionMedicamento am 
-                WHERE am.id_indicacion_med = im.id_medicamento) = 0 THEN 0
-          WHEN im.frecuencia_horas IS NULL THEN 0
-          ELSE DATEDIFF(MINUTE, GETDATE(), 
-               (SELECT TOP 1 DATEADD(HOUR, im.frecuencia_horas, am.fecha_hora) 
-                FROM AdministracionMedicamento am 
-                WHERE am.id_indicacion_med = im.id_medicamento 
-                ORDER BY am.fecha_hora DESC))
-        END as minutos_restantes,
-        -- Puede administrar (solo tiempo, la aprobacion se verifica aparte)
-        CASE 
-          WHEN (SELECT COUNT(*) FROM AdministracionMedicamento am 
-                WHERE am.id_indicacion_med = im.id_medicamento) = 0 THEN 1
-          WHEN im.frecuencia_horas IS NULL THEN 1
-          WHEN GETDATE() >= (SELECT TOP 1 DATEADD(HOUR, im.frecuencia_horas, am.fecha_hora) 
-                             FROM AdministracionMedicamento am 
-                             WHERE am.id_indicacion_med = im.id_medicamento 
-                             ORDER BY am.fecha_hora DESC) THEN 1
-          ELSE 0
-        END as puede_administrar
+      SELECT im.id_medicamento as id_indicacion_med, im.id_indicacion, im.nombre as nombre_medicamento,
+        im.dosis, im.frecuencia, im.frecuencia_horas, im.duracion, im.duracion_dias, im.via,
+        im.total_dosis, im.fecha_inicio, im.fecha_fin, im.requiere_receta,
+        i.fecha as fecha_indicacion, i.id_paciente,
+        p.nombre as nombre_paciente, p.apellido as apellido_paciente,
+        u.nombre as nombre_medico, e.id_expediente, e.estado as estado_paciente,
+        (SELECT COUNT(*) FROM AdministracionMedicamento am WHERE am.id_indicacion_med = im.id_medicamento) as dosis_administradas,
+        (SELECT TOP 1 CONVERT(varchar(19), am.fecha_hora, 120) FROM AdministracionMedicamento am WHERE am.id_indicacion_med = im.id_medicamento ORDER BY am.fecha_hora DESC) as ultima_administracion,
+        (SELECT TOP 1 CONVERT(varchar(19), DATEADD(HOUR, im.frecuencia_horas, am.fecha_hora), 120) FROM AdministracionMedicamento am WHERE am.id_indicacion_med = im.id_medicamento ORDER BY am.fecha_hora DESC) as proxima_dosis,
+        CASE WHEN im.requiere_receta = 0 THEN 1
+             WHEN im.requiere_receta = 1 AND EXISTS (SELECT 1 FROM SolicitudMedicamento sm INNER JOIN AprobacionMedicamento ap ON sm.id_solicitud = ap.id_solicitud WHERE sm.id_paciente = i.id_paciente AND sm.nombre_medicamento = im.nombre AND ap.decision = 'aprobado') THEN 1
+             ELSE 0 END as aprobado_jefe,
+        CASE WHEN (SELECT COUNT(*) FROM AdministracionMedicamento am WHERE am.id_indicacion_med = im.id_medicamento) = 0 THEN 0
+             WHEN im.frecuencia_horas IS NULL THEN 0
+             ELSE DATEDIFF(MINUTE, GETDATE(), (SELECT TOP 1 DATEADD(HOUR, im.frecuencia_horas, am.fecha_hora) FROM AdministracionMedicamento am WHERE am.id_indicacion_med = im.id_medicamento ORDER BY am.fecha_hora DESC))
+             END as minutos_restantes,
+        CASE WHEN (SELECT COUNT(*) FROM AdministracionMedicamento am WHERE am.id_indicacion_med = im.id_medicamento) = 0 THEN 1
+             WHEN im.frecuencia_horas IS NULL THEN 1
+             WHEN GETDATE() >= (SELECT TOP 1 DATEADD(HOUR, im.frecuencia_horas, am.fecha_hora) FROM AdministracionMedicamento am WHERE am.id_indicacion_med = im.id_medicamento ORDER BY am.fecha_hora DESC) THEN 1
+             ELSE 0 END as puede_administrar
       FROM IndicacionMedicamento im
       INNER JOIN Indicaciones i ON im.id_indicacion = i.id_indicacion
       INNER JOIN Paciente p ON i.id_paciente = p.id_paciente
       INNER JOIN Usuario u ON i.id_usuario = u.id_usuario
       INNER JOIN Expediente e ON p.id_paciente = e.id_paciente
       WHERE (im.fecha_fin IS NULL OR im.fecha_fin >= GETDATE())
-        AND (im.total_dosis IS NULL OR 
-             (SELECT COUNT(*) FROM AdministracionMedicamento am 
-              WHERE am.id_indicacion_med = im.id_medicamento) < im.total_dosis)
+        AND (im.total_dosis IS NULL OR (SELECT COUNT(*) FROM AdministracionMedicamento am WHERE am.id_indicacion_med = im.id_medicamento) < im.total_dosis)
       ORDER BY p.nombre, im.nombre
     `);
     res.json(result.recordset);
@@ -1287,15 +1202,8 @@ exports.obtenerAdministraciones = async (req, res) => {
   const { id_indicacion_med } = req.params;
   try {
     const pool = await poolPromise;
-    const result = await pool.request()
-      .input('id_indicacion_med', id_indicacion_med)
-      .query(`
-        SELECT am.*, u.nombre as nombre_enfermera
-        FROM AdministracionMedicamento am
-        INNER JOIN Usuario u ON am.id_usuario_enfermera = u.id_usuario
-        WHERE am.id_indicacion_med = @id_indicacion_med
-        ORDER BY am.fecha_hora DESC
-      `);
+    const result = await pool.request().input('id_indicacion_med', id_indicacion_med)
+      .query(`SELECT am.*, u.nombre as nombre_enfermera FROM AdministracionMedicamento am INNER JOIN Usuario u ON am.id_usuario_enfermera = u.id_usuario WHERE am.id_indicacion_med = @id_indicacion_med ORDER BY am.fecha_hora DESC`);
     res.json(result.recordset);
   } catch (error) {
     console.log(error);
@@ -1307,90 +1215,35 @@ exports.registrarAdministracion = async (req, res) => {
   const { id_indicacion_med, id_usuario_enfermera, numero_dosis, observaciones } = req.body;
   try {
     const pool = await poolPromise;
-
-    // Obtener info de la indicación
-    const medInfo = await pool.request()
-      .input('id', id_indicacion_med)
-      .query(`
-        SELECT im.*, i.id_paciente
-        FROM IndicacionMedicamento im
-        INNER JOIN Indicaciones i ON im.id_indicacion = i.id_indicacion
-        WHERE im.id_medicamento = @id
-      `);
-
+    const medInfo = await pool.request().input('id', id_indicacion_med)
+      .query(`SELECT im.*, i.id_paciente FROM IndicacionMedicamento im INNER JOIN Indicaciones i ON im.id_indicacion = i.id_indicacion WHERE im.id_medicamento = @id`);
     const med = medInfo.recordset[0];
-
-    // Registrar administración
     const result = await pool.request()
-      .input('id_indicacion_med', id_indicacion_med)
-      .input('id_usuario_enfermera', id_usuario_enfermera)
-      .input('numero_dosis', numero_dosis)
-      .input('observaciones', observaciones || null)
-      .query(`
-        INSERT INTO AdministracionMedicamento (id_indicacion_med, id_usuario_enfermera, fecha_hora, numero_dosis, observaciones)
-        OUTPUT INSERTED.id_administracion
-        VALUES (@id_indicacion_med, @id_usuario_enfermera, GETDATE(), @numero_dosis, @observaciones)
-      `);
-
-    // Buscar medicamento en almacén por nombre y paciente
+      .input('id_indicacion_med', id_indicacion_med).input('id_usuario_enfermera', id_usuario_enfermera)
+      .input('numero_dosis', numero_dosis).input('observaciones', observaciones || null)
+      .query(`INSERT INTO AdministracionMedicamento (id_indicacion_med, id_usuario_enfermera, fecha_hora, numero_dosis, observaciones) OUTPUT INSERTED.id_administracion VALUES (@id_indicacion_med, @id_usuario_enfermera, GETDATE(), @numero_dosis, @observaciones)`);
     if (med) {
-      const almacenRes = await pool.request()
-        .input('nombre', med.nombre)
-        .input('id_paciente', med.id_paciente)
-        .query(`
-          SELECT TOP 1 id_medicamento, stock_actual, stock_minimo, nombre
-          FROM Medicamento
-          WHERE activo = 1
-            AND (
-              -- Medicamento exclusivo del paciente
-              (id_paciente_exclusivo = @id_paciente AND nombre = @nombre)
-              OR
-              -- Medicamento general del almacén
-              (id_paciente_exclusivo IS NULL AND nombre = @nombre)
-            )
-          ORDER BY id_paciente_exclusivo DESC -- Priorizar exclusivo del paciente
-        `);
-
+      const almacenRes = await pool.request().input('nombre', med.nombre).input('id_paciente', med.id_paciente)
+        .query(`SELECT TOP 1 id_medicamento, stock_actual, stock_minimo, nombre FROM Medicamento WHERE activo = 1 AND ((id_paciente_exclusivo = @id_paciente AND nombre = @nombre) OR (id_paciente_exclusivo IS NULL AND nombre = @nombre)) ORDER BY id_paciente_exclusivo DESC`);
       if (almacenRes.recordset.length > 0) {
         const almacen = almacenRes.recordset[0];
-
         if (almacen.stock_actual > 0) {
-          // Descontar stock
-          await pool.request()
-            .input('id_medicamento', almacen.id_medicamento)
+          await pool.request().input('id_medicamento', almacen.id_medicamento)
             .query(`UPDATE Medicamento SET stock_actual = stock_actual - 1 WHERE id_medicamento = @id_medicamento`);
-
-          // Registrar movimiento
-          await pool.request()
-            .input('id_medicamento', almacen.id_medicamento)
-            .input('id_usuario', id_usuario_enfermera)
-            .query(`
-              INSERT INTO MovimientoMedicamento (id_medicamento, id_usuario, tipo, cantidad, motivo)
-              VALUES (@id_medicamento, @id_usuario, 'salida', 1, 'Administrado a paciente por enfermera')
-            `);
-
-          // Verificar stock mínimo y notificar al jefe
+          await pool.request().input('id_medicamento', almacen.id_medicamento).input('id_usuario', id_usuario_enfermera)
+            .query(`INSERT INTO MovimientoMedicamento (id_medicamento, id_usuario, tipo, cantidad, motivo) VALUES (@id_medicamento, @id_usuario, 'salida', 1, 'Administrado a paciente por enfermera')`);
           const stockActualizado = almacen.stock_actual - 1;
           if (stockActualizado <= almacen.stock_minimo) {
-            const jefes = await pool.request().query(`
-              SELECT u.id_usuario FROM Usuario u
-              INNER JOIN Rol r ON u.id_rol = r.id_rol
-              WHERE r.nombre = 'jefe_medico'
-            `);
+            const jefes = await pool.request().query(`SELECT u.id_usuario FROM Usuario u INNER JOIN Rol r ON u.id_rol = r.id_rol WHERE r.nombre = 'jefe_medico'`);
             const msg = `⚠️ Stock mínimo alcanzado: ${almacen.nombre} — Stock actual: ${stockActualizado} unidades. Se recomienda generar una requisición.`;
             for (const j of jefes.recordset) {
-              await pool.request()
-                .input('dest', j.id_usuario)
-                .input('tipo', 'stock_minimo')
-                .input('msg', msg)
-                .input('ref', almacen.id_medicamento)
+              await pool.request().input('dest', j.id_usuario).input('tipo', 'stock_minimo').input('msg', msg).input('ref', almacen.id_medicamento)
                 .query(`INSERT INTO Notificacion (id_usuario_destino, tipo, mensaje, id_referencia, tabla_referencia) VALUES (@dest, @tipo, @msg, @ref, 'Medicamento')`);
             }
           }
         }
       }
     }
-
     res.json({ id_administracion: result.recordset[0].id_administracion });
   } catch (error) {
     console.log(error);
@@ -1404,8 +1257,7 @@ exports.obtenerRequisiciones = async (req, res) => {
   try {
     const pool = await poolPromise;
     const result = await pool.request().query(`
-      SELECT r.*, u.nombre as nombre_jefe,
-             m.nombre as nombre_medicamento_ref
+      SELECT r.*, u.nombre as nombre_jefe, m.nombre as nombre_medicamento_ref
       FROM Requisicion r
       INNER JOIN Usuario u ON r.id_usuario_jefe = u.id_usuario
       LEFT JOIN Medicamento m ON r.id_medicamento = m.id_medicamento
@@ -1423,18 +1275,10 @@ exports.crearRequisicion = async (req, res) => {
   try {
     const pool = await poolPromise;
     const result = await pool.request()
-      .input('id_usuario_jefe', id_usuario_jefe)
-      .input('tipo', tipo)
-      .input('descripcion', descripcion)
-      .input('cantidad', cantidad)
-      .input('unidad', unidad || null)
-      .input('motivo', motivo || null)
+      .input('id_usuario_jefe', id_usuario_jefe).input('tipo', tipo).input('descripcion', descripcion)
+      .input('cantidad', cantidad).input('unidad', unidad || null).input('motivo', motivo || null)
       .input('id_medicamento', id_medicamento || null)
-      .query(`
-        INSERT INTO Requisicion (id_usuario_jefe, tipo, descripcion, cantidad, unidad, motivo, id_medicamento, estado)
-        OUTPUT INSERTED.id_requisicion
-        VALUES (@id_usuario_jefe, @tipo, @descripcion, @cantidad, @unidad, @motivo, @id_medicamento, 'pendiente')
-      `);
+      .query(`INSERT INTO Requisicion (id_usuario_jefe, tipo, descripcion, cantidad, unidad, motivo, id_medicamento, estado) OUTPUT INSERTED.id_requisicion VALUES (@id_usuario_jefe, @tipo, @descripcion, @cantidad, @unidad, @motivo, @id_medicamento, 'pendiente')`);
     res.json(result.recordset[0]);
   } catch (error) {
     console.log(error);
