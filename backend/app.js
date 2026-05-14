@@ -10,6 +10,7 @@ const usuarioRoutes = require('./routes/usuario.routes');
 const familiarRoutes = require('./routes/familiar.routes');
 const contratoRoutes = require('./routes/contrato.routes');
 const medicoRoutes = require('./routes/medico.routes');
+const recibosRoutes = require('./routes/recibos.routes');
 
 const app = express();
 app.use(cors());
@@ -24,6 +25,7 @@ app.use('/pacientes', pacientesRoutes);
 app.use('/familiar', familiarRoutes);
 app.use('/contratos', contratoRoutes);
 app.use('/medico', medicoRoutes);
+app.use('/recibos', recibosRoutes);
 
 app.listen(3000, () => {
   console.log('Servidor corriendo en puerto 3000');

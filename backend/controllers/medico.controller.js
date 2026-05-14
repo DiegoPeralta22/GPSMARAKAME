@@ -1279,6 +1279,29 @@ exports.crearRequisicion = async (req, res) => {
       .input('cantidad', cantidad).input('unidad', unidad || null).input('motivo', motivo || null)
       .input('id_medicamento', id_medicamento || null)
       .query(`INSERT INTO Requisicion (id_usuario_jefe, tipo, descripcion, cantidad, unidad, motivo, id_medicamento, estado) OUTPUT INSERTED.id_requisicion VALUES (@id_usuario_jefe, @tipo, @descripcion, @cantidad, @unidad, @motivo, @id_medicamento, 'pendiente')`);
+    const id_requisicion = result.recordset[0].id_requisicion;
+
+    // Notificar a administrador
+    const admins = await pool.request().query(`
+      SELECT u.id_usuario FROM Usuario u
+      INNER JOIN Rol r ON u.id_rol = r.id_rol
+      WHERE r.nombre = 'administrador'
+    `);
+    const jefeRes = await pool.request()
+      .input('id', id_usuario_jefe)
+      .query(`SELECT nombre FROM Usuario WHERE id_usuario = @id`);
+    const nombreJefe = jefeRes.recordset[0]?.nombre || 'Jefe médico';
+    const tipoLabel = tipo === 'medicamento' ? 'medicamento' : 'insumo médico';
+    const mensaje = `Nueva requisición de ${tipoLabel}: "${descripcion}" (${cantidad} ${unidad || 'unidades'}). Solicitado por ${nombreJefe}.`;
+
+    for (const admin of admins.recordset) {
+      await pool.request()
+        .input('dest', admin.id_usuario)
+        .input('mensaje', mensaje)
+        .input('ref', id_requisicion)
+        .query(`INSERT INTO Notificacion (id_usuario_destino, tipo, mensaje, id_referencia, tabla_referencia) VALUES (@dest, 'nueva_requisicion', @mensaje, @ref, 'Requisicion')`);
+    }
+
     res.json(result.recordset[0]);
   } catch (error) {
     console.log(error);

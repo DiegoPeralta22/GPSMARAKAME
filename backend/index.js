@@ -9,6 +9,9 @@ app.use(express.json());
 const authRoutes = require('./routes/auth.routes');
 app.use('/', authRoutes);
 
+const recibosRoutes = require('./routes/recibos.routes');
+app.use('/recibos', recibosRoutes);
+
 const medicoRoutes = require('./routes/medico.routes');
 app.use('/medico', medicoRoutes);
 
