@@ -21,6 +21,7 @@ import Citas from "./pages/citas/Citas.jsx";
 import Pacientes from "./pages/admisiones/Pacientes/Pacientes.jsx";
 import Expedientes from "./pages/admisiones/Expedientes/Expedientes.jsx";
 import Financiero from "./pages/financiero/Financiero.jsx";
+import HistoriaMedica from "./pages/medico/HistoriaMedica.jsx";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <BrowserRouter>
@@ -44,6 +45,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
       <Route path="/pacientes" element={<Pacientes />} />
       <Route path="/expedientes" element={<Expedientes />} />
       <Route path="/financiero" element={<Financiero />} />
+      <Route path="/historial" element={<HistoriaMedica />} />
     </Routes>
   </BrowserRouter>
 );

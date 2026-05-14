@@ -293,3 +293,19 @@ export const crearNotaNutricional = async (datos) => {
   });
   return res.json();
 };
+
+// ==================== VALORACIÓN INGRESO ====================
+
+export const obtenerPendientesValoracion = async () => {
+  const res = await fetch(`${BASE_URL}/valoraciones`);
+  return res.json();
+};
+
+export const valorarIngreso = async (datos) => {
+  const res = await fetch(`${BASE_URL}/valoracion/independiente`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(datos),
+  });
+  return res.json();
+};
