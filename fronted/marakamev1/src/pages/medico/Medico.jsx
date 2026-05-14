@@ -10,11 +10,12 @@ import {
 import Pacientes from "./Pacientes";
 import Expediente from "./Expediente";
 import Valoracion from "./Valoracion";
-import ValoracionIngreso from "./ValoracionIngreso";
-import RecepcionPaciente from "./RecepcionPaciente";
 import Desintoxicacion from "./Desintoxicacion";
 import Indicaciones from "./Indicaciones";
 import Laboratorio from "./Laboratorio";
+import Evolucion from "./Evolucion";
+import Diagnostico from "./Diagnostico";
+import Actividades from "./Actividades";
 import HistoriaMedica from "./HistoriaMedica";
 
 const styles = `
@@ -30,10 +31,14 @@ const styles = `
   .med-nav-item:hover { background: rgba(255,255,255,0.06); color: #fff; }
   .med-nav-item.active { background: rgba(59,130,246,0.18); color: #60a5fa; border-left: 3px solid #3b82f6; }
   .med-nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
-  .med-sidebar-footer { padding: 16px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; gap: 10px; }
+  .med-sidebar-footer { padding: 16px; border-top: 1px solid rgba(255,255,255,0.08); }
+  .med-sidebar-footer-user { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
   .med-avatar { width: 34px; height: 34px; border-radius: 50%; background: #3b82f6; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; font-weight: 700; flex-shrink: 0; }
   .med-sidebar-footer-info h4 { color: #fff; font-size: 12px; font-weight: 600; }
   .med-sidebar-footer-info p { color: rgba(255,255,255,0.4); font-size: 10px; }
+  .med-logout-btn { display: flex; align-items: center; gap: 8px; padding: 8px 12px; color: rgba(255,255,255,0.5); font-size: 12px; cursor: pointer; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; font-family: 'Inter', sans-serif; width: 100%; transition: all 0.15s; }
+  .med-logout-btn:hover { background: rgba(239,68,68,0.2); color: #fca5a5; border-color: rgba(239,68,68,0.3); }
+  .med-logout-btn svg { width: 14px; height: 14px; }
   .med-topbar { background: #111827; position: fixed; top: 0; left: 0; right: 0; height: 36px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; z-index: 200; }
   .med-topbar span { color: rgba(255,255,255,0.5); font-size: 11px; }
   .med-main { margin-left: 200px; flex: 1; padding: 28px 32px; margin-top: 36px; }
@@ -68,11 +73,6 @@ const styles = `
   .med-task-item { padding: 12px 0; border-bottom: 1px solid #f3f4f6; }
   .med-task-item:last-child { border-bottom: none; }
   .med-task-name { font-size: 13px; color: #374151; margin-bottom: 5px; font-weight: 500; }
-  .med-actions-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 16px; }
-  .med-action-btn { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer; transition: all 0.15s; font-family: 'Inter', sans-serif; }
-  .med-action-btn:hover { border-color: #3b82f6; background: #eff6ff; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(59,130,246,0.12); }
-  .med-action-btn svg { width: 20px; height: 20px; color: #3b82f6; }
-  .med-action-label { font-size: 12px; color: #374151; font-weight: 500; text-align: center; }
   .med-empty { text-align: center; padding: 24px; color: #9ca3af; font-size: 13px; }
   .med-loading { text-align: center; padding: 24px; color: #9ca3af; font-size: 13px; }
 
@@ -108,17 +108,16 @@ const styles = `
 `;
 
 const NAV_ITEMS = [
-  { id: "dashboard", label: "Dashboard", icon: "chart" },
-  { id: "pacientes", label: "Pacientes", icon: "users" },
-  { id: "val-ingreso", label: "Val. de Ingreso", icon: "bell" },
-  { id: "recepcion", label: "Recepción 24h", icon: "heart" },
-  { id: "valoracion", label: "Valoración", icon: "activity" },
-  { id: "historia", label: "Historia Médica", icon: "file" },
-  { id: "indicaciones", label: "Indicaciones", icon: "pill" },
-  { id: "desintoxicacion", label: "Desintoxicación", icon: "drop" },
-  { id: "evolucion", label: "Evolución", icon: "chart" },
-  { id: "laboratorio", label: "Laboratorio", icon: "flask" },
-  { id: "actividades", label: "Actividades", icon: "calendar" },
+  { id: "dashboard",      label: "Inicio",           icon: "chart"    },
+  { id: "pacientes",      label: "Pacientes",         icon: "users"    },
+  { id: "valoracion",     label: "Valoración",        icon: "heart"    },
+  { id: "diagnostico",    label: "Diagnóstico",       icon: "file"     },
+  { id: "indicaciones",   label: "Indicaciones",      icon: "pill"     },
+  { id: "desintoxicacion",label: "Desintoxicación",   icon: "drop"     },
+  { id: "evolucion",      label: "Evolución",         icon: "activity" },
+  { id: "laboratorio",    label: "Laboratorio",       icon: "flask"    },
+  { id: "actividades",    label: "Actividades",       icon: "calendar" },
+  { id: "historia",       label: "Historia Médica",   icon: "file"     },
 ];
 
 const ICONS = {
@@ -132,9 +131,10 @@ const ICONS = {
   flask: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 3h6l1 9H8L9 3z"/><path d="M6.5 21a5 5 0 0 0 11 0c0-3-2.5-5.5-5.5-8.5C9 15.5 6.5 18 6.5 21z"/></svg>,
   calendar: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
   bell: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
+  logout: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
 };
 
-const SECCIONES_LISTAS = ["dashboard", "pacientes", "expediente", "val-ingreso", "recepcion", "valoracion", "desintoxicacion", "indicaciones", "laboratorio", "historia"];
+const SECCIONES_LISTAS = ["dashboard", "pacientes", "expediente", "valoracion", "desintoxicacion", "indicaciones", "laboratorio", "evolucion", "diagnostico", "actividades", "historia"];
 
 function getNotifIconClass(tipo) {
   if (!tipo) return "info";
@@ -153,6 +153,7 @@ function getNotifEmoji(tipo) {
   if (tipo.includes("seguimiento")) return "⏰";
   if (tipo.includes("urgente")) return "🚨";
   if (tipo.includes("laboratorio")) return "🔬";
+  if (tipo.includes("nutricional")) return "🥗";
   return "🔔";
 }
 
@@ -176,8 +177,6 @@ export default function Medico() {
   const [cargando, setCargando] = useState(true);
   const [pacienteActivo, setPacienteActivo] = useState(null);
   const [pacienteInfo, setPacienteInfo] = useState(null);
-
-  // Notificaciones
   const [notificaciones, setNotificaciones] = useState([]);
   const [panelAbierto, setPanelAbierto] = useState(false);
   const noLeidas = notificaciones.filter(n => !n.leida).length;
@@ -189,12 +188,9 @@ export default function Medico() {
     if (u?.id_usuario) cargarNotificaciones(u.id_usuario);
   }, []);
 
-  // Polling de notificaciones cada 60 segundos
   useEffect(() => {
     if (!usuario?.id_usuario) return;
-    const interval = setInterval(() => {
-      cargarNotificaciones(usuario.id_usuario);
-    }, 60000);
+    const interval = setInterval(() => cargarNotificaciones(usuario.id_usuario), 60000);
     return () => clearInterval(interval);
   }, [usuario]);
 
@@ -232,9 +228,7 @@ export default function Medico() {
         setNotificaciones(prev =>
           prev.map(n => n.id_notificacion === notif.id_notificacion ? { ...n, leida: 1 } : n)
         );
-      } catch (error) {
-        console.error(error);
-      }
+      } catch (error) { console.error(error); }
     }
     setPanelAbierto(false);
     const tipo = notif.tipo || "";
@@ -251,9 +245,12 @@ export default function Medico() {
     try {
       await marcarTodasLeidas(usuario.id_usuario);
       setNotificaciones(prev => prev.map(n => ({ ...n, leida: 1 })));
-    } catch (error) {
-      console.error(error);
-    }
+    } catch (error) { console.error(error); }
+  };
+
+  const handleCerrarSesion = () => {
+    localStorage.removeItem("usuario");
+    window.location.href = "/";
   };
 
   const iniciales = usuario?.nombre
@@ -281,33 +278,28 @@ export default function Medico() {
       <style>{styles}</style>
       <div className="med-app">
 
-        {/* OVERLAY para cerrar panel */}
-        {panelAbierto && (
-          <div className="med-notif-overlay" onClick={() => setPanelAbierto(false)} />
-        )}
+        {panelAbierto && <div className="med-notif-overlay" onClick={() => setPanelAbierto(false)} />}
 
         <div className="med-topbar">
           <span>
             {seccionActiva === "expediente" ? "Expediente" :
-             seccionActiva === "val-ingreso" ? "Valoración de Ingreso" :
-             seccionActiva === "recepcion" ? "Recepción Médica — Primeras 24 Horas" :
              seccionActiva === "valoracion" ? "Valoración Médica" :
              seccionActiva === "desintoxicacion" ? "Protocolo de Desintoxicación" :
              seccionActiva === "indicaciones" ? "Indicaciones Médicas" :
              seccionActiva === "laboratorio" ? "Solicitud de Laboratorio" :
+             seccionActiva === "evolucion" ? "Nota de Evolución" :
+             seccionActiva === "diagnostico" ? "Diagnóstico Médico" :
+             seccionActiva === "actividades" ? "Actividades del Paciente" :
              seccionActiva === "historia" ? "Historia Médica" :
-             NAV_ITEMS.find(n => n.id === seccionActiva)?.label || "Dashboard"}
+             NAV_ITEMS.find(n => n.id === seccionActiva)?.label || "Inicio"}
           </span>
-          {/* CAMPANA */}
           <button className="med-notif-btn" onClick={() => setPanelAbierto(!panelAbierto)}>
             {ICONS.bell}
-            {noLeidas > 0 && (
-              <span className="med-notif-counter">{noLeidas > 9 ? "9+" : noLeidas}</span>
-            )}
+            {noLeidas > 0 && <span className="med-notif-counter">{noLeidas > 9 ? "9+" : noLeidas}</span>}
           </button>
         </div>
 
-        {/* PANEL DE NOTIFICACIONES */}
+        {/* PANEL NOTIFICACIONES */}
         {panelAbierto && (
           <div className="med-notif-panel">
             <div className="med-notif-panel-header">
@@ -315,31 +307,17 @@ export default function Medico() {
                 🔔 Notificaciones {noLeidas > 0 && <span style={{ fontSize: 12, color: "#3b82f6", fontWeight: 700 }}>({noLeidas} nuevas)</span>}
               </span>
               <div className="med-notif-panel-actions">
-                {noLeidas > 0 && (
-                  <button className="med-notif-marcar-todas" onClick={handleMarcarTodas}>
-                    Marcar todas como leídas
-                  </button>
-                )}
+                {noLeidas > 0 && <button className="med-notif-marcar-todas" onClick={handleMarcarTodas}>Marcar todas como leídas</button>}
                 <button className="med-notif-close" onClick={() => setPanelAbierto(false)}>✕</button>
               </div>
             </div>
-
             <div className="med-notif-list">
               {notificaciones.length === 0 ? (
-                <div className="med-notif-empty">
-                  <div style={{ fontSize: 32, marginBottom: 8 }}>🔔</div>
-                  No tienes notificaciones
-                </div>
+                <div className="med-notif-empty"><div style={{ fontSize: 32, marginBottom: 8 }}>🔔</div>No tienes notificaciones</div>
               ) : (
                 notificaciones.map((n, i) => (
-                  <div
-                    key={i}
-                    className={`med-notif-item ${!n.leida ? "no-leida" : ""}`}
-                    onClick={() => handleMarcarLeida(n)}
-                  >
-                    <div className={`med-notif-icon ${getNotifIconClass(n.tipo)}`}>
-                      {getNotifEmoji(n.tipo)}
-                    </div>
+                  <div key={i} className={`med-notif-item ${!n.leida ? "no-leida" : ""}`} onClick={() => handleMarcarLeida(n)}>
+                    <div className={`med-notif-icon ${getNotifIconClass(n.tipo)}`}>{getNotifEmoji(n.tipo)}</div>
                     <div className="med-notif-content">
                       <div className="med-notif-msg">{n.mensaje}</div>
                       <div className="med-notif-fecha">{formatFecha(n.fecha)}</div>
@@ -366,11 +344,17 @@ export default function Medico() {
             ))}
           </nav>
           <div className="med-sidebar-footer">
-            <div className="med-avatar">{iniciales}</div>
-            <div className="med-sidebar-footer-info">
-              <h4>{usuario?.nombre || "Dr. Javier"}</h4>
-              <p>Médico Tratante</p>
+            <div className="med-sidebar-footer-user">
+              <div className="med-avatar">{iniciales}</div>
+              <div className="med-sidebar-footer-info">
+                <h4>{usuario?.nombre || "Dr. Javier"}</h4>
+                <p>Médico Tratante</p>
+              </div>
             </div>
+            <button className="med-logout-btn" onClick={handleCerrarSesion}>
+              {ICONS.logout}
+              Cerrar Sesión
+            </button>
           </div>
         </aside>
 
@@ -396,7 +380,7 @@ export default function Medico() {
                   </div>
                 ))}
               </div>
-              <div className="med-two-col">
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
                 <div className="med-card">
                   <div className="med-card-header">
                     <span className="med-card-title">Pacientes Recientes</span>
@@ -432,99 +416,28 @@ export default function Medico() {
                     ))}
                 </div>
               </div>
-              <div className="med-card">
-                <div className="med-card-header">
-                  <span className="med-card-title">Acciones Rápidas</span>
-                </div>
-                <div className="med-actions-grid">
-                  {[
-                    { label: "Nueva Valoración", icon: "activity", nav: "valoracion" },
-                    { label: "Nota de Evolución", icon: "chart", nav: "evolucion" },
-                    { label: "Solicitud Laboratorio", icon: "flask", nav: "laboratorio" },
-                    { label: "Ver Pacientes", icon: "users", nav: "pacientes" },
-                  ].map((a, i) => (
-                    <button key={i} className="med-action-btn" onClick={() => handleNav(a.nav)}>
-                      {ICONS[a.icon]}
-                      <span className="med-action-label">{a.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
             </>
           )}
 
-          {/* PACIENTES */}
-          {seccionActiva === "pacientes" && (
-            <Pacientes onVerExpediente={handleVerExpediente} />
-          )}
-
-          {/* EXPEDIENTE */}
-          {seccionActiva === "expediente" && pacienteActivo && (
-            <Expediente
-              id_paciente={pacienteActivo}
-              onVolver={() => setSeccionActiva("pacientes")}
-              onNavegar={(seccion) => setSeccionActiva(seccion)}
-            />
-          )}
-
-          {/* VALORACIÓN DE INGRESO */}
-          {seccionActiva === "val-ingreso" && (
-            <ValoracionIngreso />
-          )}
-
-          {/* RECEPCIÓN MÉDICA 24H */}
-          {seccionActiva === "recepcion" && (
-            <RecepcionPaciente usuario={usuario} />
-          )}
-
-          {/* VALORACIÓN */}
-          {seccionActiva === "valoracion" && (
-            <Valoracion rol={rol} />
-          )}
-
-          {/* DESINTOXICACIÓN */}
-          {seccionActiva === "desintoxicacion" && (
-            <Desintoxicacion rol={rol} />
-          )}
-
-          {/* INDICACIONES */}
-          {seccionActiva === "indicaciones" && (
-            <Indicaciones rol={rol} />
-          )}
-
-          {/* LABORATORIO */}
-          {seccionActiva === "laboratorio" && (
-            <Laboratorio rol={rol} />
-          )}
+          {seccionActiva === "pacientes" && <Pacientes onVerExpediente={handleVerExpediente} />}
+          {seccionActiva === "expediente" && pacienteActivo && <Expediente id_paciente={pacienteActivo} onVolver={() => setSeccionActiva("pacientes")} onNavegar={(seccion) => setSeccionActiva(seccion)} />}
+          {seccionActiva === "valoracion" && <Valoracion rol={rol} />}
+          {seccionActiva === "desintoxicacion" && <Desintoxicacion rol={rol} />}
+          {seccionActiva === "indicaciones" && <Indicaciones rol={rol} />}
+          {seccionActiva === "laboratorio" && <Laboratorio rol={rol} />}
+          {seccionActiva === "evolucion" && <Evolucion rol={rol} />}
+          {seccionActiva === "diagnostico" && <Diagnostico rol={rol} />}
+          {seccionActiva === "actividades" && <Actividades rol={rol} />}
 
           {/* HISTORIA MÉDICA */}
-          {seccionActiva === "historia" && (
-            <HistoriaMedica usuario={usuario} />
-          )}
+          {seccionActiva === "historia" && <HistoriaMedica usuario={usuario} />}
 
-          {/* SECCIONES EN DESARROLLO */}
+
           {!SECCIONES_LISTAS.includes(seccionActiva) && (
-            pacienteActivo ? (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh", gap: 12 }}>
-                <h2 style={{ fontSize: 20, fontWeight: 600, color: "#374151" }}>
-                  {NAV_ITEMS.find(n => n.id === seccionActiva)?.label}
-                </h2>
-                <p style={{ color: "#9ca3af", fontSize: 14 }}>Esta sección está en desarrollo</p>
-                <button onClick={() => setSeccionActiva("expediente")} style={{ marginTop: 8, padding: "8px 20px", background: "#3b82f6", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 500 }}>
-                  ← Volver al Expediente
-                </button>
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh", gap: 12 }}>
-                <h2 style={{ fontSize: 20, fontWeight: 600, color: "#374151" }}>
-                  {NAV_ITEMS.find(n => n.id === seccionActiva)?.label}
-                </h2>
-                <p style={{ color: "#9ca3af", fontSize: 14 }}>Selecciona un paciente primero</p>
-                <button onClick={() => handleNav("pacientes")} style={{ marginTop: 8, padding: "8px 20px", background: "#3b82f6", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 500 }}>
-                  Ir a Pacientes
-                </button>
-              </div>
-            )
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh", gap: 12 }}>
+              <h2 style={{ fontSize: 20, fontWeight: 600, color: "#374151" }}>{NAV_ITEMS.find(n => n.id === seccionActiva)?.label}</h2>
+              <p style={{ color: "#9ca3af", fontSize: 14 }}>Esta sección está en desarrollo</p>
+            </div>
           )}
         </main>
       </div>

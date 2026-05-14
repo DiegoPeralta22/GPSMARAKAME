@@ -24,7 +24,6 @@ const styles = `
   .pac-estado-badge.desintoxicacion { background: #fff7ed; color: #f97316; }
   .pac-estado-badge.tratamiento { background: #f0fdf4; color: #16a34a; }
   .pac-estado-badge.valoracion { background: #eff6ff; color: #3b82f6; }
-  .pac-alerta { display: flex; align-items: center; gap: 6px; background: #fff1f2; border-radius: 6px; padding: 6px 10px; margin-bottom: 12px; font-size: 12px; color: #ef4444; font-weight: 500; }
   .pac-datos { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 16px; }
   .pac-dato-label { font-size: 11px; color: #9ca3af; }
   .pac-dato-value { font-size: 12px; color: #374151; font-weight: 500; }
@@ -136,8 +135,8 @@ export default function Pacientes({ onVerExpediente }) {
                     <div className="pac-dato-value">{p.dias_tratamiento ?? 0} días</div>
                   </div>
                   <div>
-                    <div className="pac-dato-label">Última visita:</div>
-                    <div className="pac-dato-value">{p.ultima_visita ? new Date(p.ultima_visita).toLocaleDateString() : "—"}</div>
+                    <div className="pac-dato-label">Último diagnóstico:</div>
+                    <div className="pac-dato-value">{p.ultimo_diagnostico ? new Date(p.ultimo_diagnostico).toLocaleDateString() : "—"}</div>
                   </div>
                 </div>
 

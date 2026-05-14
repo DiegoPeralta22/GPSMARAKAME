@@ -43,43 +43,21 @@ export const obtenerValoracion = async (id_paciente) => {
 
 export const crearValoracion = async (datos) => {
   const res = await fetch(`${BASE_URL}/valoracion`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(datos),
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(datos),
   });
   return res.json();
 };
 
 export const crearValoracionIndependiente = async (datos) => {
   const res = await fetch(`${BASE_URL}/valoracion/independiente`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(datos),
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(datos),
   });
   return res.json();
 };
 
 export const actualizarValoracion = async (id_valoracion, datos) => {
   const res = await fetch(`${BASE_URL}/valoracion/${id_valoracion}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(datos),
-  });
-  return res.json();
-};
-
-// ==================== VALORACIÓN DE INGRESO ====================
-
-export const obtenerPendientesValoracion = async () => {
-  const res = await fetch(`${BASE_URL}/pendientes-valoracion`);
-  return res.json();
-};
-
-export const valorarIngreso = async (datos) => {
-  const res = await fetch(`${BASE_URL}/valorar-ingreso`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(datos),
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(datos),
   });
   return res.json();
 };
@@ -93,18 +71,14 @@ export const obtenerDiagnosticos = async (id_paciente) => {
 
 export const crearDiagnostico = async (datos) => {
   const res = await fetch(`${BASE_URL}/diagnostico`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(datos),
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(datos),
   });
   return res.json();
 };
 
 export const crearSolicitudCambio = async (datos) => {
   const res = await fetch(`${BASE_URL}/diagnostico/solicitud`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(datos),
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(datos),
   });
   return res.json();
 };
@@ -118,9 +92,7 @@ export const obtenerIndicaciones = async (id_paciente) => {
 
 export const crearIndicacion = async (datos) => {
   const res = await fetch(`${BASE_URL}/indicaciones`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(datos),
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(datos),
   });
   return res.json();
 };
@@ -134,9 +106,7 @@ export const obtenerProtocolo = async (id_paciente) => {
 
 export const crearProtocolo = async (datos) => {
   const res = await fetch(`${BASE_URL}/protocolo`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(datos),
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(datos),
   });
   return res.json();
 };
@@ -150,9 +120,7 @@ export const obtenerSeguimientos = async (id_protocolo) => {
 
 export const crearSeguimiento = async (datos) => {
   const res = await fetch(`${BASE_URL}/seguimiento`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(datos),
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(datos),
   });
   return res.json();
 };
@@ -166,9 +134,7 @@ export const obtenerNotas = async (id_paciente) => {
 
 export const crearNota = async (datos) => {
   const res = await fetch(`${BASE_URL}/evolucion`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(datos),
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(datos),
   });
   return res.json();
 };
@@ -182,9 +148,7 @@ export const obtenerSolicitudesLab = async (id_paciente) => {
 
 export const crearSolicitudLab = async (datos) => {
   const res = await fetch(`${BASE_URL}/laboratorio`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(datos),
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(datos),
   });
   return res.json();
 };
@@ -198,9 +162,103 @@ export const obtenerActividades = async (id_paciente) => {
 
 export const crearActividad = async (datos) => {
   const res = await fetch(`${BASE_URL}/actividades`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(datos),
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(datos),
+  });
+  return res.json();
+};
+
+// ==================== MEDICAMENTOS ====================
+
+export const obtenerMedicamentos = async (tipo = "") => {
+  const url = tipo ? `${BASE_URL}/medicamentos?tipo=${tipo}` : `${BASE_URL}/medicamentos`;
+  const res = await fetch(url);
+  return res.json();
+};
+
+export const crearMedicamento = async (datos) => {
+  const res = await fetch(`${BASE_URL}/medicamentos`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(datos),
+  });
+  return res.json();
+};
+
+export const actualizarControlado = async (id_medicamento, es_controlado) => {
+  const res = await fetch(`${BASE_URL}/medicamentos/${id_medicamento}/controlado`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ es_controlado }),
+  });
+  return res.json();
+};
+
+export const registrarMovimiento = async (datos) => {
+  const res = await fetch(`${BASE_URL}/medicamentos/movimiento`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(datos),
+  });
+  return res.json();
+};
+
+export const obtenerMovimientos = async (id_medicamento) => {
+  const res = await fetch(`${BASE_URL}/medicamentos/movimientos/${id_medicamento}`);
+  return res.json();
+};
+
+// ==================== SOLICITUDES DE MEDICAMENTO ====================
+
+export const obtenerSolicitudesMedicamento = async (params = {}) => {
+  const query = new URLSearchParams(params).toString();
+  const res = await fetch(`${BASE_URL}/solicitudes-medicamento?${query}`);
+  return res.json();
+};
+
+export const crearSolicitudMedicamento = async (datos) => {
+  const res = await fetch(`${BASE_URL}/solicitudes-medicamento`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(datos),
+  });
+  return res.json();
+};
+
+export const aprobarSolicitudMedicamento = async (id_solicitud, datos) => {
+  const res = await fetch(`${BASE_URL}/solicitudes-medicamento/${id_solicitud}/aprobar`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(datos),
+  });
+  return res.json();
+};
+
+export const verificarIngresoExterno = async (id_solicitud, datos) => {
+  const res = await fetch(`${BASE_URL}/solicitudes-medicamento/${id_solicitud}/verificar-externo`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(datos),
+  });
+  return res.json();
+};
+
+export const registrarEntregaEnfermera = async (id_solicitud, datos) => {
+  const res = await fetch(`${BASE_URL}/solicitudes-medicamento/${id_solicitud}/entregar`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(datos),
+  });
+  return res.json();
+};
+
+export const obtenerMedicamentosPaciente = async (id_paciente) => {
+  const res = await fetch(`${BASE_URL}/medicamentos-paciente/${id_paciente}`);
+  return res.json();
+};
+
+// ==================== PERSONAL ====================
+
+export const obtenerPersonal = async () => {
+  const res = await fetch(`${BASE_URL}/personal`);
+  return res.json();
+};
+
+// ==================== SOLICITUDES DE CAMBIO (JEFE) ====================
+
+export const obtenerSolicitudesCambio = async () => {
+  const res = await fetch(`${BASE_URL}/solicitudes-cambio`);
+  return res.json();
+};
+
+export const resolverSolicitud = async (id_solicitud, datos) => {
+  const res = await fetch(`${BASE_URL}/solicitudes-cambio/${id_solicitud}/resolver`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(datos),
   });
   return res.json();
 };
@@ -213,15 +271,25 @@ export const obtenerNotificaciones = async (id_usuario) => {
 };
 
 export const marcarNotificacionLeida = async (id_notificacion) => {
-  const res = await fetch(`${BASE_URL}/notificaciones/${id_notificacion}/leida`, {
-    method: "PUT"
-  });
+  const res = await fetch(`${BASE_URL}/notificaciones/${id_notificacion}/leida`, { method: "PUT" });
   return res.json();
 };
 
 export const marcarTodasLeidas = async (id_usuario) => {
-  const res = await fetch(`${BASE_URL}/notificaciones/todas/${id_usuario}/leidas`, {
-    method: "PUT"
+  const res = await fetch(`${BASE_URL}/notificaciones/todas/${id_usuario}/leidas`, { method: "PUT" });
+  return res.json();
+};
+
+// ==================== NOTAS NUTRICIONALES ====================
+
+export const obtenerNotasNutricionales = async (id_paciente) => {
+  const res = await fetch(`${BASE_URL}/nutricion/${id_paciente}`);
+  return res.json();
+};
+
+export const crearNotaNutricional = async (datos) => {
+  const res = await fetch(`${BASE_URL}/nutricion`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(datos),
   });
   return res.json();
 };

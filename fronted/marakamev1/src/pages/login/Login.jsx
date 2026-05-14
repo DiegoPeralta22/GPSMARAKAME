@@ -7,48 +7,51 @@ export default function Login() {
   const [password, setPassword] = useState("");
 
   const handleLogin = async () => {
-  try {
-    const data = await login(correo, password);
-console.log("data recibida:", data);
-    if (!data.success) {
-      alert("Credenciales incorrectas");
-      return;
+    try {
+      const data = await login(correo, password);
+      console.log("data recibida:", data);
+      if (!data.success) {
+        alert("Credenciales incorrectas");
+        return;
+      }
+
+      localStorage.setItem("usuario", JSON.stringify(data.user));
+
+      if (data.user.rol === "director") {
+        window.location.href = "/director";
+      } else if (data.user.rol === "administrador") {
+        window.location.href = "/administrador";
+      } else if (data.user.rol === "admision") {
+        window.location.href = "/admisiones";
+      } else if (data.user.rol === "medico") {
+        window.location.href = "/medico";
+      } else if (data.user.rol === "jefe_medico") {
+        window.location.href = "/jefe-medico";
+      } else if (data.user.rol === "enfermera") {
+        window.location.href = "/enfermera";
+      } else if (data.user.rol === "nutriologo") {
+        window.location.href = "/nutriologo";
+      } else if (data.user.rol === "clinico") {
+        window.location.href = "/clinico";
+      } else {
+        alert("Rol no reconocido");
+      }
+
+    } catch (error) {
+      console.error(error);
+      alert("Error en el servidor");
     }
-
-    localStorage.setItem("usuario", JSON.stringify(data.user));
-
-  if (data.user.rol === "director") {
-  window.location.href = "/director";
-} else if (data.user.rol === "administrador") {
-  window.location.href = "/administrador";
-} else if (data.user.rol === "admision") {
-  window.location.href = "/admisiones";
-} else if (data.user.rol === "medico") {
-  window.location.href = "/medico";
-} else if (data.user.rol === "clinico") {
-  window.location.href = "/clinico";
-} else {
-  alert("Rol no reconocido");
-}
-
-  } catch (error) {
-    console.error(error);
-    alert("Error en el servidor");
-  }
-};
+  };
 
   return (
     <div className="login-container">
-      
       <div className="login-left">
         <div className="left-content">
           <div className="badge">MARAKAME</div>
-
           <h1>
             Bienvenido a <br />
             <span>MARAKAME</span>
           </h1>
-
           <p>
             Clínica especializada en tratamiento residencial para adicciones.
           </p>
@@ -100,7 +103,6 @@ console.log("data recibida:", data);
           <p>© 2026 MARAKAME • PRIVACY POLICY • TERMS OF SERVICE</p>
         </div>
       </div>
-
     </div>
   );
 }
