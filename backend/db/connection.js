@@ -1,7 +1,10 @@
 const sql = require('mssql/msnodesqlv8');
 
 const config = {
-  connectionString: "Driver={ODBC Driver 17 for SQL Server};Server=localhost\\SQLEXPRESS;Database=MARAKAMEV1;Trusted_Connection=yes;"
+  connectionString: "Driver={ODBC Driver 17 for SQL Server};Server=localhost\\SQLEXPRESS;Database=MARAKAMEV1;Trusted_Connection=yes;",
+  pool: { max: 10, min: 2, idleTimeoutMillis: 30000 },
+  requestTimeout: 20000,
+  connectionTimeout: 15000,
 };
 
 const pool = new sql.ConnectionPool(config);

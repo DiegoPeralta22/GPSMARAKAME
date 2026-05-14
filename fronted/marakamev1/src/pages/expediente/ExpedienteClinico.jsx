@@ -119,7 +119,6 @@ const ESTADO_CITA = {
 export default function ExpedienteClinico({ id_paciente, onVolver }) {
   const [datos, setDatos] = useState(null);
   const [cargando, setCargando] = useState(true);
-  const [tab, setTab] = useState("adm");
 
   useEffect(() => {
     if (id_paciente) cargar();
@@ -195,25 +194,11 @@ export default function ExpedienteClinico({ id_paciente, onVolver }) {
           </div>
         </div>
 
-        {/* TABS */}
-        <div className="ec-tabs ec-no-print">
-          {[
-            { id: "adm", label: "Admisiones", dot: "#0b5d5b", cls: "a-active" },
-            { id: "med", label: "Médico", dot: "#3b82f6", cls: "m-active" },
-            { id: "cli", label: "Clínico", dot: "#16a34a", cls: "c-active" },
-          ].map(t => (
-            <button key={t.id} className={`ec-tab ${tab === t.id ? t.cls : ""}`} onClick={() => setTab(t.id)}>
-              <span className="ec-tab-dot" style={{ background: t.dot }} />
-              {t.label}
-            </button>
-          ))}
-        </div>
-
         {/* BODY */}
         <div className="ec-body">
 
-          {/* ══════════ ADMISIONES ══════════ */}
-          <div className="ec-tab-content" style={{ display: tab === "adm" ? "block" : "none" }}>
+          {/* ══════════ EXPEDIENTE COMPLETO ══════════ */}
+          <div className="ec-tab-content">
 
             {/* Datos del Paciente */}
             <div className="ec-section">
@@ -365,7 +350,7 @@ export default function ExpedienteClinico({ id_paciente, onVolver }) {
           </div>
 
           {/* ══════════ MÉDICO ══════════ */}
-          <div className="ec-tab-content ec-area-break" style={{ display: tab === "med" ? "block" : "none" }}>
+          <div className="ec-tab-content ec-area-break">
 
             {/* Valoración de Ingreso */}
             <div className="ec-section">
@@ -483,7 +468,7 @@ export default function ExpedienteClinico({ id_paciente, onVolver }) {
           </div>
 
           {/* ══════════ CLÍNICO ══════════ */}
-          <div className="ec-tab-content ec-area-break" style={{ display: tab === "cli" ? "block" : "none" }}>
+          <div className="ec-tab-content ec-area-break">
             {traslado ? (
               <>
                 {/* Traslado */}

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import "./EstudioSocioeconomico.css";
 import "../Admisiones.css";
+import { fetchPacientes } from "../../../utils/pacientes.js";
 
 const IcoGrid   = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>;
 const IcoHome   = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 21V12h6v9"/></svg>;
@@ -26,10 +27,46 @@ const FRECUENCIAS = ["Diario","C/3 Días","1 vez a la semana","1 vez al mes","Oc
 const emptyPersona = () => ({ nombre:"", fechaNac:"", edad:"", sexo:"", estadoCivil:"", ocupacion:"", domicilio:"", telefono:"", escolaridad:"", lugarNac:"" });
 const emptyFamiliar = () => ({ nombre:"", parentesco:"", edad:"", ocupacion:"", estadoCivil:"", sexo:"" });
 
-export default function EstudioSocioeconomico() {
+const comprimirImagen = (file) => new Promise((resolve) => {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      const MAX_W = 600, MAX_H = 200;
+      let w = img.width, h = img.height;
+      if (w > MAX_W) { h = Math.round(h * MAX_W / w); w = MAX_W; }
+      if (h > MAX_H) { w = Math.round(w * MAX_H / h); h = MAX_H; }
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL("image/jpeg", 0.65));
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+const normEC = (v) => {
+  const m = { Soltero:"Soltero/a", Casado:"Casado/a", Divorciado:"Divorciado/a", Viudo:"Viudo/a" };
+  return (v && m[v]) ? m[v] : (v || "");
+};
+const buildAdics = (sustStr, existing) => {
+  const sust = (sustStr || "").split(",").map(s => s.trim()).filter(Boolean);
+  if (!sust.length) return null;
+  const ex = {};
+  (existing || []).forEach(a => { if (a.tipo) ex[a.tipo.toLowerCase()] = a; });
+  return sust.map(s => ({ tipo: s, cantidad: ex[s.toLowerCase()]?.cantidad || "", frecuencia: ex[s.toLowerCase()]?.frecuencia || "" }));
+};
+
+export default function EstudioSocioeconomico({ embedded = false, presetId = null, onClose = null }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const idPaciente = searchParams.get("id");
+  const [idSeleccionado, setIdSeleccionado] = useState(null);
+  const idPaciente = presetId
+    ? String(presetId)
+    : embedded
+      ? (idSeleccionado !== null ? String(idSeleccionado) : searchParams.get("id"))
+      : searchParams.get("id");
   const usuario = JSON.parse(localStorage.getItem("usuario") || "{}");
 
   // --- Buscador de paciente cuando no hay ?id ---
@@ -41,9 +78,8 @@ export default function EstudioSocioeconomico() {
   useEffect(() => {
     if (idPaciente) return;
     setBuscando(true);
-    fetch("http://localhost:3000/pacientes-admision")
-      .then(r => r.json())
-      .then(data => setTodosLosAptos(Array.isArray(data) ? data.filter(p => p.apto === 1) : []))
+    fetchPacientes()
+      .then(data => setTodosLosAptos(data.filter(p => p.apto === 1)))
       .catch(() => setTodosLosAptos([]))
       .finally(() => setBuscando(false));
   }, [idPaciente]);
@@ -101,13 +137,21 @@ export default function EstudioSocioeconomico() {
   ]);
   const [diagnostico, setDiagnostico] = useState("");
   const [obsTrabajador, setObsTrabajador] = useState("");
+  const [sustanciasPreregistro, setSustanciasPreregistro] = useState("");
   const [obsVisita, setObsVisita] = useState("");
   const [firmaSolicitante, setFirmaSolicitante] = useState("");
   const [firmaTrabajador, setFirmaTrabajador] = useState("");
   const [savedMsg, setSavedMsg] = useState(false);
 
   useEffect(() => {
-    if (idPaciente) cargarEstudio();
+    if (!idPaciente) return;
+    setSolicitante({ ...emptyPersona(), tarjeta:"", referencias:"" });
+    setBeneficiario(emptyPersona());
+    setFamiliares([emptyFamiliar()]);
+    setSustanciasPreregistro("");
+    setFolio("");
+    setPaso(0);
+    cargarEstudio();
   }, [idPaciente]);
 
   const cargarEstudio = async () => {
@@ -125,6 +169,7 @@ export default function EstudioSocioeconomico() {
       const pac = ingreso?.paciente || null;
       const r = {};
       (cuestionario?.respuestas || []).forEach(x => { r[x.id_pregunta] = x.respuesta || ""; });
+      if (r[20]) setSustanciasPreregistro(r[20]);
 
       if (data?.datos_json) {
         const parsed = JSON.parse(data.datos_json);
@@ -134,6 +179,11 @@ export default function EstudioSocioeconomico() {
           if (!merged.domicilio && r[6]) merged.domicilio = r[6];
           if (!merged.telefono && (r[7] || r[8])) merged.telefono = r[7] || r[8];
           if (!merged.ocupacion && r[9]) merged.ocupacion = r[9];
+          if (!merged.lugarNac && r[5]) merged.lugarNac = r[5];
+          if (!merged.sexo && r[32]) merged.sexo = r[32];
+          if (!merged.fechaNac && r[33]) merged.fechaNac = r[33];
+          if (!merged.estadoCivil && r[34]) merged.estadoCivil = r[34];
+          if (!merged.escolaridad && r[35]) merged.escolaridad = r[35];
           return merged;
         });
         if (parsed.beneficiario) setBeneficiario(prev => {
@@ -142,17 +192,25 @@ export default function EstudioSocioeconomico() {
             const nomPac = `${pac.nombre || ""} ${pac.apellido || ""}`.trim();
             if (!merged.nombre && nomPac) merged.nombre = nomPac;
             if (!merged.edad && pac.edad) merged.edad = String(pac.edad);
-            if (!merged.estadoCivil && pac.estado_civil) merged.estadoCivil = pac.estado_civil;
+            if (!merged.fechaNac && pac.fecha_nacimiento) merged.fechaNac = String(pac.fecha_nacimiento).slice(0, 10);
+            if (!merged.sexo && pac.genero) merged.sexo = pac.genero;
+            if (!merged.estadoCivil && pac.estado_civil) merged.estadoCivil = normEC(pac.estado_civil);
             if (!merged.domicilio && pac.direccion) merged.domicilio = pac.direccion;
             if (!merged.ocupacion && pac.ocupacion) merged.ocupacion = pac.ocupacion;
             if (!merged.escolaridad && pac.escolaridad) merged.escolaridad = pac.escolaridad;
+            if (!merged.telefono && pac.telefono) merged.telefono = pac.telefono;
+            if (!merged.lugarNac && r[17]) merged.lugarNac = r[17];
           }
           return merged;
         });
         if (parsed.familiares) setFamiliares(parsed.familiares);
         if (parsed.economia) setEconomia(parsed.economia);
         if (parsed.bienes) setBienes(parsed.bienes);
-        if (parsed.salud) setSalud(parsed.salud);
+        if (parsed.salud) {
+          const s = { ...parsed.salud };
+          if (r[20]) { const a = buildAdics(r[20], s.adicciones); if (a) s.adicciones = a; }
+          setSalud(s);
+        }
         if (parsed.vivienda) setVivienda(parsed.vivienda);
         if (parsed.materiales) setMateriales(parsed.materiales);
         if (parsed.alimentacion) setAlimentacion(parsed.alimentacion);
@@ -170,17 +228,30 @@ export default function EstudioSocioeconomico() {
           domicilio: r[6] || prev.domicilio,
           telefono: r[7] || r[8] || prev.telefono,
           ocupacion: r[9] || prev.ocupacion,
+          lugarNac: r[5] || prev.lugarNac,
+          sexo: r[32] || prev.sexo,
+          fechaNac: r[33] || prev.fechaNac,
+          estadoCivil: r[34] || prev.estadoCivil,
+          escolaridad: r[35] || prev.escolaridad,
         }));
         if (pac) {
           setBeneficiario(prev => ({
             ...prev,
             nombre: `${pac.nombre || ""} ${pac.apellido || ""}`.trim() || prev.nombre,
             edad: pac.edad ? String(pac.edad) : prev.edad,
-            estadoCivil: pac.estado_civil || prev.estadoCivil,
+            fechaNac: pac.fecha_nacimiento ? String(pac.fecha_nacimiento).slice(0, 10) : prev.fechaNac,
+            sexo: pac.genero || prev.sexo,
+            estadoCivil: normEC(pac.estado_civil) || prev.estadoCivil,
             domicilio: pac.direccion || prev.domicilio,
             ocupacion: pac.ocupacion || prev.ocupacion,
             escolaridad: pac.escolaridad || prev.escolaridad,
+            telefono: pac.telefono || prev.telefono,
+            lugarNac: r[17] || prev.lugarNac,
           }));
+        }
+        if (r[20]) {
+          const a = buildAdics(r[20], null);
+          if (a) setSalud(prev => ({ ...prev, adicciones: a }));
         }
       }
 
@@ -215,6 +286,10 @@ export default function EstudioSocioeconomico() {
 
   const guardar = async (status = "borrador") => {
     if (!idPaciente) { alert("No se especificó paciente."); return; }
+    if (status === "enviado") {
+      if (!firmaSolicitante) { alert("Se requiere la firma del solicitante antes de enviar el estudio."); return; }
+      if (!firmaTrabajador) { alert("Se requiere la firma del trabajador social antes de enviar el estudio."); return; }
+    }
     setGuardando(true);
     try {
       const res = await fetch("http://localhost:3000/estudio", {
@@ -490,6 +565,12 @@ export default function EstudioSocioeconomico() {
         <div className="est-field"><label>OTROS</label><input placeholder="00" value={salud.otrosSalud} onChange={e=>setSalud(p=>({...p,otrosSalud:e.target.value}))} /></div>
       </div>
       <h3 className="est-section-title" style={{marginTop:20}}>ADICCIONES</h3>
+      {sustanciasPreregistro && (
+        <div style={{ background: "#f0faf9", border: "1px solid #0b5d5b", borderRadius: 8, padding: "8px 14px", marginBottom: 14, fontSize: 13 }}>
+          <span style={{ fontWeight: 700, color: "#0b5d5b" }}>Del preregistro: </span>
+          <span style={{ color: "#374151" }}>{sustanciasPreregistro}</span>
+        </div>
+      )}
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:16}}>
         {salud.adicciones.map((a,i)=>(
           <div key={i} className="est-card-inner">
@@ -530,16 +611,24 @@ export default function EstudioSocioeconomico() {
           </select>
         </div>
       </div>
-      <h4 style={{marginBottom:12,color:"#374151",fontSize:13,fontWeight:600}}>CARACTERÍSTICAS DE LA VIVIENDA</h4>
-      <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:16}}>
+      <h4 style={{marginBottom:12,color:"#374151",fontSize:13,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px"}}>CARACTERÍSTICAS DE LA VIVIENDA</h4>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 160px",gap:10,marginBottom:16}}>
         {["sala","comedor","cocina","jardin"].map(c=>(
-          <label key={c} className={`est-chip ${vivienda[c]?"est-chip-active":""}`} onClick={()=>setVivienda(p=>({...p,[c]:!p[c]}))}>
-            {c.charAt(0).toUpperCase()+c.slice(1)} {vivienda[c]?"✓":""}
-          </label>
+          <button key={c} type="button" onClick={()=>setVivienda(p=>({...p,[c]:!p[c]}))}
+            style={{
+              padding:"16px 8px", borderRadius:10, border:`2px solid ${vivienda[c]?"#0b5d5b":"#e5e7eb"}`,
+              background:vivienda[c]?"#e6f4f3":"#f9fafb", cursor:"pointer",
+              color:vivienda[c]?"#0b5d5b":"#6b7280", fontWeight:700, fontSize:14,
+              display:"flex",flexDirection:"column",alignItems:"center",gap:6, transition:"all .15s"
+            }}>
+            <span style={{fontSize:22}}>{c==="sala"?"🛋️":c==="comedor"?"🍽️":c==="cocina"?"🍳":"🌿"}</span>
+            {c.charAt(0).toUpperCase()+c.slice(1)}
+            {vivienda[c] && <span style={{fontSize:11,background:"#0b5d5b",color:"#fff",borderRadius:20,padding:"1px 8px"}}>✓ Sí</span>}
+          </button>
         ))}
-        <div className="est-field" style={{display:"inline-flex",alignItems:"center",gap:8,margin:0}}>
-          <label style={{margin:0}}>Baños:</label>
-          <input type="number" min="0" value={vivienda.banos} onChange={e=>setVivienda(p=>({...p,banos:e.target.value}))} style={{width:60}} />
+        <div className="est-field" style={{margin:0}}>
+          <label>BAÑOS</label>
+          <input type="number" min="0" value={vivienda.banos} onChange={e=>setVivienda(p=>({...p,banos:e.target.value}))} style={{textAlign:"center",fontSize:20,fontWeight:700,padding:"14px 8px"}} />
         </div>
       </div>
       <div className="est-field"><label>OTROS (ESPECIFIQUE)</label><textarea placeholder="(Describa):" value={vivienda.otrosVivienda} onChange={e=>setVivienda(p=>({...p,otrosVivienda:e.target.value}))} /></div>
@@ -623,13 +712,11 @@ export default function EstudioSocioeconomico() {
             : <div className="est-firma-linea" />}
           <span>FIRMA DEL SOLICITANTE</span>
           <label style={{ marginTop: 6, fontSize: 11, color: "#0b5d5b", cursor: "pointer", fontWeight: 600 }}>
-            {firmaSolicitante ? "Cambiar archivo" : "Subir firma (imagen/PDF)"}
-            <input type="file" accept="image/*,.pdf" style={{ display: "none" }} onChange={e => {
+            {firmaSolicitante ? "Cambiar archivo" : "Subir firma (imagen)"}
+            <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => {
               const f = e.target.files[0];
               if (!f) return;
-              const reader = new FileReader();
-              reader.onload = ev => setFirmaSolicitante(ev.target.result);
-              reader.readAsDataURL(f);
+              setFirmaSolicitante(await comprimirImagen(f));
             }} />
           </label>
           {firmaSolicitante && (
@@ -646,12 +733,10 @@ export default function EstudioSocioeconomico() {
           <small style={{ marginTop: 2 }}>{usuario.nombre || ""}</small>
           <label style={{ marginTop: 6, fontSize: 11, color: "#0b5d5b", cursor: "pointer", fontWeight: 600 }}>
             {firmaTrabajador ? "Cambiar archivo" : "Subir firma (imagen/PDF)"}
-            <input type="file" accept="image/*,.pdf" style={{ display: "none" }} onChange={e => {
+            <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => {
               const f = e.target.files[0];
               if (!f) return;
-              const reader = new FileReader();
-              reader.onload = ev => setFirmaTrabajador(ev.target.result);
-              reader.readAsDataURL(f);
+              setFirmaTrabajador(await comprimirImagen(f));
             }} />
           </label>
           {firmaTrabajador && (
@@ -662,7 +747,7 @@ export default function EstudioSocioeconomico() {
         </div>
       </div>
       <div className="est-footer-actions">
-        <button className="est-btn-cancel" onClick={()=>navigate("/admisiones")}>Cancelar</button>
+        <button className="est-btn-cancel" onClick={() => onClose ? onClose() : embedded ? setIdSeleccionado(null) : navigate("/admisiones")}>← Volver</button>
         <button className="est-btn-save" onClick={()=>guardar("enviado")} disabled={guardando}>
           {guardando ? "Enviando..." : "ENVIAR ESTUDIO FINAL"}
         </button>
@@ -672,27 +757,36 @@ export default function EstudioSocioeconomico() {
 
   const RENDERS = [renderSolicitante, renderBeneficiario, renderFamiliares, renderEconomia, renderBienes, renderSalud, renderVivienda, renderMateriales, renderAlimentacion, renderReferencias, renderFirmas];
 
+  const adm_sidebar = (
+    <div className="adm-sidebar">
+      <div className="adm-sidebar-top">
+        <h2>MARAKAME</h2>
+        <p className="user">ADMISIONES: {usuario.nombre || "—"}</p>
+      </div>
+      <nav>
+        <ul>
+          <li onClick={() => navigate("/")}><IcoGrid />Inicio</li>
+          <li onClick={() => navigate("/admisiones")}><IcoHome />Admisiones</li>
+          <li onClick={() => navigate("/pacientes")}><IcoUsers />Pacientes</li>
+          <li onClick={() => navigate("/registro")}><IcoUser />Preregistro</li>
+          <li onClick={() => navigate("/historial")}><IcoFile />Historial clínico</li>
+          <li className="active"><IcoMoney />Estudio Socioeconómico</li>
+          <li onClick={() => navigate("/citas")}><IcoCal />Agenda de Citas</li>
+          <li onClick={() => navigate("/validacion")}><IcoShield />Validación de Ingreso</li>
+          <li onClick={() => navigate("/preingreso")}><IcoDoc />Preingreso</li>
+          <li onClick={() => navigate("/expedientes")}><IcoFolder />Expedientes</li>
+        </ul>
+      </nav>
+      <div className="adm-sidebar-bottom">
+        <button className="adm-btn" onClick={() => navigate("/registro")}>+ Registro de Paciente</button>
+      </div>
+    </div>
+  );
+  const wrap = (m) => embedded ? m : <div className="dashboard">{adm_sidebar}{m}</div>;
+
   // ─── Pantalla de selección de paciente ──────────────────
   if (!idPaciente) {
-    return (
-      <div className="dashboard">
-        <div className="adm-sidebar">
-          <h2>MARAKAME</h2>
-          <p className="user">ADMISIONES: {usuario.nombre || "—"}</p>
-          <ul>
-            <li onClick={() => navigate("/")}><IcoGrid />Inicio</li>
-            <li onClick={() => navigate("/admisiones")}><IcoHome />Admisiones</li>
-            <li onClick={() => navigate("/pacientes")}><IcoUsers />Pacientes</li>
-            <li onClick={() => navigate("/registro")}><IcoUser />Agregar Paciente</li>
-            <li onClick={() => navigate("/historial")}><IcoFile />Historial clínico</li>
-            <li className="active"><IcoMoney />Estudio Socioeconómico</li>
-            <li onClick={() => navigate("/citas")}><IcoCal />Agenda de Citas</li>
-            <li onClick={() => navigate("/validacion")}><IcoShield />Validación de Ingreso</li>
-            <li onClick={() => navigate("/preingreso")}><IcoDoc />Preingreso</li>
-            <li onClick={() => navigate("/expedientes")}><IcoFolder />Expedientes</li>
-          </ul>
-          <button className="adm-btn" onClick={() => navigate("/registro")}>+ Registro de Paciente</button>
-        </div>
+    return wrap(
         <div className="main">
           <div className="header">
             <h3>Estudio Socioeconómico</h3>
@@ -753,7 +847,7 @@ export default function EstudioSocioeconomico() {
               const PacCard = ({ p, bg, badgeBg, badgeColor, badgeText, accion }) => (
                 <div
                   key={p.id_paciente}
-                  onClick={() => navigate(`/estudio?id=${p.id_paciente}`)}
+                  onClick={() => embedded ? setIdSeleccionado(p.id_paciente) : navigate(`/estudio?id=${p.id_paciente}`)}
                   style={{ background: bg || "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: 18, cursor: "pointer", transition: "all .15s" }}
                   onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,.08)"; e.currentTarget.style.borderColor = "#0b5d5b"; }}
                   onMouseLeave={e => { e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.borderColor = "#e5e7eb"; }}
@@ -786,40 +880,20 @@ export default function EstudioSocioeconomico() {
             })()}
           </div>
         </div>
-      </div>
     );
   }
 
-  return (
-    <div className="dashboard">
-      <div className="adm-sidebar">
-        <h2>MARAKAME</h2>
-        <p className="user">ADMISIONES: {usuario.nombre || "—"}</p>
-        <ul>
-          <li onClick={() => navigate("/")}><IcoGrid />Inicio</li>
-          <li onClick={() => navigate("/admisiones")}><IcoHome />Admisiones</li>
-          <li onClick={() => navigate("/pacientes")}><IcoUsers />Pacientes</li>
-          <li onClick={() => navigate("/registro")}><IcoUser />Agregar Paciente</li>
-          <li onClick={() => navigate("/historial")}><IcoFile />Historial clínico</li>
-          <li className="active"><IcoMoney />Estudio Socioeconómico</li>
-          <li onClick={() => navigate("/citas")}><IcoCal />Agenda de Citas</li>
-          <li onClick={() => navigate("/validacion")}><IcoShield />Validación de Ingreso</li>
-          <li onClick={() => navigate("/preingreso")}><IcoDoc />Preingreso</li>
-          <li onClick={() => navigate("/expedientes")}><IcoFolder />Expedientes</li>
-        </ul>
-        <button className="adm-btn" onClick={() => navigate("/registro")}>+ Registro de Paciente</button>
-      </div>
-      <div className="main" style={{ overflowY: "auto", padding: 0 }}>
-        <div className="est-layout">
-          {renderHeader()}
-          {renderPasos()}
-          <div className="est-content">
-            <h3 className="est-paso-titulo">{PASOS[paso]}</h3>
-            {RENDERS[paso]()}
-            <div className="est-nav">
-              {paso > 0 && <button className="est-btn-ant" onClick={()=>setPaso(p=>p-1)}>← Anterior</button>}
-              {paso < PASOS.length - 1 && <button className="est-btn-sig" onClick={()=>setPaso(p=>p+1)}>Siguiente →</button>}
-            </div>
+  return wrap(
+    <div className="main" style={{ overflowY: "auto", padding: 0 }}>
+      <div className="est-layout">
+        {renderHeader()}
+        {renderPasos()}
+        <div className="est-content">
+          <h3 className="est-paso-titulo">{PASOS[paso]}</h3>
+          {RENDERS[paso]()}
+          <div className="est-nav">
+            {paso > 0 && <button className="est-btn-ant" onClick={()=>setPaso(p=>p-1)}>← Anterior</button>}
+            {paso < PASOS.length - 1 && <button className="est-btn-sig" onClick={()=>setPaso(p=>p+1)}>Siguiente →</button>}
           </div>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import "../Admisiones.css";
+import { fetchPacientes } from "../../../utils/pacientes.js";
 
 const IcoGrid   = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>;
 const IcoHome   = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 21V12h6v9"/></svg>;
@@ -17,7 +18,7 @@ const badge = (bg, color, text) => (
   <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 8, background: bg, color, whiteSpace: "nowrap" }}>{text}</span>
 );
 
-export default function Pacientes() {
+export default function Pacientes({ embedded = false, onVerExpediente }) {
   const navigate = useNavigate();
   const usuario = JSON.parse(localStorage.getItem("usuario") || "{}");
 
@@ -28,12 +29,13 @@ export default function Pacientes() {
   const [filtro, setFiltro]       = useState("todos");
 
   const getEstadoPaciente = (p) => {
-    if (p.decision === "rechazado") return { label: "Rechazado",   bg: "#fff1f2", color: "#ef4444" };
-    if (p.decision === "aprobado")  return { label: "Paciente",    bg: "#e6f4f3", color: "#0b5d5b" };
-    if (p.apto === 0)               return { label: "Revaloración",bg: "#fff7ed", color: "#d97706" };
-    if (p.apto === 1)               return { label: "Espera",      bg: "#eff6ff", color: "#2563eb" };
-    if (p.id_cuestionario)          return { label: "Espera",      bg: "#eff6ff", color: "#2563eb" };
-    return                                 { label: "Solicitante", bg: "#f3f4f6", color: "#6b7280" };
+    if (p.decision === "rechazado")     return { label: "Rechazado",    bg: "#fff1f2", color: "#ef4444" };
+    if (p.decision === "aprobado")      return { label: "Paciente",     bg: "#e6f4f3", color: "#0b5d5b" };
+    if (p.decision === "pendiente_pago")return { label: "Pend. Admin.", bg: "#fff7ed", color: "#d97706" };
+    if (p.apto === 0)                   return { label: "Revaloración", bg: "#fff7ed", color: "#d97706" };
+    if (p.apto === 1)                   return { label: "Espera",       bg: "#eff6ff", color: "#2563eb" };
+    if (p.id_cuestionario)              return { label: "Espera",       bg: "#eff6ff", color: "#2563eb" };
+    return                                     { label: "Solicitante",  bg: "#f3f4f6", color: "#6b7280" };
   };
 
   useEffect(() => { cargar(); }, []);
@@ -42,9 +44,7 @@ export default function Pacientes() {
     setCargando(true);
     setError(false);
     try {
-      const res = await fetch("http://localhost:3000/pacientes-admision");
-      if (!res.ok) throw new Error("status " + res.status);
-      const data = await res.json();
+      const data = await fetchPacientes();
       setPacientes(Array.isArray(data) ? data : []);
     } catch {
       setError(true);
@@ -75,16 +75,18 @@ export default function Pacientes() {
     p.decision === "rechazado" || p.apto === 0
   ).length;
 
-  return (
-    <div className="dashboard">
-      <div className="adm-sidebar">
+  const adm_sidebar = (
+    <div className="adm-sidebar">
+      <div className="adm-sidebar-top">
         <h2>MARAKAME</h2>
         <p className="user">ADMISIONES: {usuario.nombre || "—"}</p>
+      </div>
+      <nav>
         <ul>
           <li onClick={() => navigate("/")}><IcoGrid />Inicio</li>
           <li onClick={() => navigate("/admisiones")}><IcoHome />Admisiones</li>
           <li className="active"><IcoUsers />Pacientes</li>
-          <li onClick={() => navigate("/registro")}><IcoUser />Agregar Paciente</li>
+          <li onClick={() => navigate("/registro")}><IcoUser />Preregistro</li>
           <li onClick={() => navigate("/historial")}><IcoFile />Historial clínico</li>
           <li onClick={() => navigate("/estudio")}><IcoMoney />Estudio Socioeconómico</li>
           <li onClick={() => navigate("/citas")}><IcoCal />Agenda de Citas</li>
@@ -92,10 +94,15 @@ export default function Pacientes() {
           <li onClick={() => navigate("/preingreso")}><IcoDoc />Preingreso</li>
           <li onClick={() => navigate("/expedientes")}><IcoFolder />Expedientes</li>
         </ul>
+      </nav>
+      <div className="adm-sidebar-bottom">
         <button className="adm-btn" onClick={() => navigate("/registro")}>+ Registro de Paciente</button>
       </div>
-
-      <div className="main" style={{ overflowY: "auto" }}>
+    </div>
+  );
+  const wrap = (m) => embedded ? m : <div className="dashboard">{adm_sidebar}{m}</div>;
+  return wrap(
+    <div className="main" style={{ overflowY: "auto" }}>
         <div className="header">
           <h3>Pacientes</h3>
           <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
@@ -157,7 +164,7 @@ export default function Pacientes() {
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
                   <tr style={{ background: "#f9fafb" }}>
-                    {["ID", "Nombre", "Edad", "Estado", "Cuestionario", "Val. Médica", "Estudio", "Decisión", ""].map((h, i) => (
+                    {["ID", "Paciente", "Estatus", ""].map((h, i) => (
                       <th key={i} style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", borderBottom: "1px solid #e5e7eb" }}>{h}</th>
                     ))}
                   </tr>
@@ -165,53 +172,37 @@ export default function Pacientes() {
                 <tbody>
                   {filtrados.length === 0 ? (
                     <tr>
-                      <td colSpan={9} style={{ padding: 40, textAlign: "center", color: "#9ca3af" }}>
+                      <td colSpan={4} style={{ padding: 40, textAlign: "center", color: "#9ca3af" }}>
                         {busqueda ? "Sin resultados para esa búsqueda" : "No hay pacientes registrados"}
                       </td>
                     </tr>
                   ) : filtrados.map((p, i) => {
-                    const cuestionarioOk = p.id_cuestionario && (p.total_respuestas >= 8) && ((p.sec4_count ?? 0) >= 2);
+                    const est = getEstadoPaciente(p);
                     return (
                     <tr
                       key={i}
                       style={{ borderBottom: "1px solid #f3f4f6", cursor: "pointer" }}
                       onMouseEnter={e => e.currentTarget.style.background = "#f9fafb"}
                       onMouseLeave={e => e.currentTarget.style.background = ""}
-                      onClick={() => navigate(`/expedientes?id=${p.id_paciente}`)}
+                      onClick={() => embedded && onVerExpediente ? onVerExpediente(p.id_paciente) : navigate(`/expedientes?id=${p.id_paciente}`)}
                     >
-                      <td style={{ padding: "12px 14px", color: "#9ca3af", fontSize: 12 }}>{p.id_paciente}</td>
+                      <td style={{ padding: "12px 14px", color: "#9ca3af", fontSize: 12 }}>
+                        {`MK-${new Date().getFullYear()}-${String(p.id_paciente).padStart(3,"0")}`}
+                      </td>
                       <td style={{ padding: "12px 14px", fontWeight: 600, color: "#111827" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <div style={{ width: 30, height: 30, borderRadius: "50%", background: "#0b5d5b", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+                          <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#0b5d5b", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
                             {(p.nombre||"")[0]}{(p.apellido||"")[0]}
                           </div>
-                          {p.nombre} {p.apellido}
+                          <div>
+                            <div>{p.nombre} {p.apellido}</div>
+                            {p.edad ? <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 400 }}>{p.edad} años</div> : null}
+                          </div>
                         </div>
                       </td>
-                      <td style={{ padding: "12px 14px", color: "#6b7280" }}>{p.edad} años</td>
                       <td style={{ padding: "12px 14px" }}>
-                        {(() => { const e = getEstadoPaciente(p); return badge(e.bg, e.color, e.label); })()}
+                        {badge(est.bg, est.color, est.label)}
                       </td>
-                      <td style={{ padding: "12px 14px" }}>
-                        {cuestionarioOk
-                          ? <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                              {badge("#e6f4f3","#0b5d5b","✓ Completo")}
-                              <span
-                                style={{ color: "#6b7280", fontWeight: 700, fontSize: 11, cursor: "pointer", textDecoration: "underline" }}
-                                onClick={e => { e.stopPropagation(); navigate(`/registro?id=${p.id_paciente}`); }}
-                              >Editar</span>
-                            </div>
-                          : <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                              {p.id_cuestionario ? badge("#fff7ed","#d97706","Incompleto") : badge("#f3f4f6","#9ca3af","Pendiente")}
-                              <span
-                                style={{ color: "#0b5d5b", fontWeight: 700, fontSize: 11, cursor: "pointer", textDecoration: "underline" }}
-                                onClick={e => { e.stopPropagation(); navigate(`/registro?id=${p.id_paciente}`); }}
-                              >Completar</span>
-                            </div>}
-                      </td>
-                      <td style={{ padding: "12px 14px" }}>{p.apto === 1 ? badge("#e6f4f3","#0b5d5b","Apto") : p.apto === 0 ? badge("#fff1f2","#ef4444","No Apto") : badge("#f3f4f6","#9ca3af","Pendiente")}</td>
-                      <td style={{ padding: "12px 14px" }}>{p.estudio_status === "enviado" ? badge("#e6f4f3","#0b5d5b","Enviado") : p.id_estudio ? badge("#fff7ed","#d97706","Borrador") : badge("#f3f4f6","#9ca3af","Pendiente")}</td>
-                      <td style={{ padding: "12px 14px" }}>{p.decision === "aprobado" ? badge("#e6f4f3","#0b5d5b","✓ Aprobado") : p.decision === "rechazado" ? badge("#fff1f2","#ef4444","✗ Rechazado") : badge("#fff7ed","#d97706","⏳ Pendiente")}</td>
                       <td style={{ padding: "12px 14px" }}>
                         <span style={{ color: "#0b5d5b", fontWeight: 700, fontSize: 12 }}>Ver expediente →</span>
                       </td>
@@ -223,7 +214,6 @@ export default function Pacientes() {
             </div>
           )}
         </div>
-      </div>
     </div>
   );
 }

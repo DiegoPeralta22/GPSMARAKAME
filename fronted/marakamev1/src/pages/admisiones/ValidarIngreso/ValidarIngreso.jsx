@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import "../Admisiones.css";
 import "./ValidarIngreso.css";
+import { fetchPacientes, invalidatePacientes } from "../../../utils/pacientes.js";
 
 const IcoGrid   = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>;
 const IcoHome   = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 21V12h6v9"/></svg>;
@@ -33,8 +34,9 @@ const ICON = {
   ok:"✓", pendiente:"○", bloqueado:"✗", "en-curso":"⏳", rechazado:"✗", "no-apto":"✗",
 };
 
-export default function ValidarIngreso() {
+export default function ValidarIngreso({ embedded = false, defaultPacienteId = null, onMounted, onIrEstudio }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const usuario = JSON.parse(localStorage.getItem("usuario") || "{}");
 
   const [pacientes, setPacientes]         = useState([]);
@@ -49,18 +51,36 @@ export default function ValidarIngreso() {
   const [lugarPersonalizado, setLugarPersonalizado] = useState("");
   const [guardando, setGuardando]         = useState(false);
   const [busqueda, setBusqueda]           = useState("");
+  const [filtroLista, setFiltroLista]     = useState("pendientes");
+  const [showReciboModal, setShowReciboModal] = useState(false);
+  const [enviandoRecibo, setEnviandoRecibo]   = useState(false);
+  const [reciboForm, setReciboForm] = useState({
+    nombre_pagador:"", fecha_pago: new Date().toISOString().slice(0,10),
+    domicilio:"", cp:"", rfc:"", telefono:"",
+    nombre_paciente_recibo:"", clave_paciente:"",
+    concepto:"Servicio de tratamiento residencial para adicciones",
+    monto_tratamiento:"", monto_familiar:"",
+    cantidad_letra:"", firma_responsable:"", firma_aval:"",
+  });
 
   useEffect(() => { cargarPacientes(); }, []);
 
   const cargarPacientes = async () => {
     setCargando(true);
     try {
-      const res = await fetch("http://localhost:3000/pacientes-admision");
-      const data = await res.json();
+      const data = await fetchPacientes();
       setPacientes(Array.isArray(data) ? data : []);
     } catch { setPacientes([]); }
     finally { setCargando(false); }
   };
+
+  useEffect(() => {
+    const pid = defaultPacienteId || searchParams.get("pacienteId");
+    if (!pid || pacientes.length === 0) return;
+    const pac = pacientes.find(p => String(p.id_paciente) === String(pid));
+    if (pac) setSeleccionado(pac);
+    if (onMounted) onMounted();
+  }, [pacientes, defaultPacienteId]);
 
   useEffect(() => {
     let cancel = false;
@@ -75,66 +95,100 @@ export default function ValidarIngreso() {
     return () => { cancel = true; };
   }, [seleccionado]);
 
+  const cerrarCaso = async () => {
+    if (!window.confirm) return; // fallback guard
+    await fetch(`http://localhost:3000/pacientes/${seleccionado.id_paciente}/archivar`, { method: "PUT" });
+    alert("Caso cerrado. El paciente ya no aparecerá en el sistema.");
+    invalidatePacientes();
+    await cargarPacientes();
+    setSeleccionado(null); setDatos(null);
+  };
+
   const guardarDecision = async () => {
     if (!decision) { alert("Selecciona una decisión."); return; }
+    if (decision === "aprobado") {
+      const pac = datos?.paciente || seleccionado;
+      setReciboForm(prev => ({
+        ...prev,
+        nombre_paciente_recibo: `${pac?.nombre || ""} ${pac?.apellido || ""}`.trim(),
+        clave_paciente: `MK-${new Date().getFullYear()}-${String(pac?.id_paciente || 0).padStart(3,"0")}`,
+      }));
+      setShowReciboModal(true);
+      return;
+    }
     setGuardando(true);
     try {
       let motivo = motivoRechazo;
       if (decision === "rechazado" && referir) {
         const lugar = lugarReferencia === "otro" ? lugarPersonalizado : lugarReferencia;
-        if (lugar) {
-          motivo = motivo ? `${motivo}\n[Referido a: ${lugar}]` : `[Referido a: ${lugar}]`;
-        }
+        if (lugar) motivo = motivo ? `${motivo}\n[Referido a: ${lugar}]` : `[Referido a: ${lugar}]`;
       }
       await fetch("http://localhost:3000/validar-ingreso", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id_paciente: seleccionado.id_paciente, id_usuario: usuario.id_usuario, decision, motivo_rechazo: motivo })
       });
-      const msgs = {
-        aprobado: "Paciente aprobado. Se notificó al área clínica.",
-        rechazado: "Paciente rechazado.",
-        requiere_valoracion: "Se solicitó nueva valoración médica. El médico debe re-evaluar al paciente.",
-      };
+      const msgs = { rechazado: "Paciente rechazado.", requiere_valoracion: "Se solicitó nueva valoración médica." };
       alert(msgs[decision] || "Decisión guardada.");
+      invalidatePacientes();
       await cargarPacientes();
-      setSeleccionado(null);
-      setDatos(null);
-      setReferir(false);
-      setLugarReferencia("");
-      setLugarPersonalizado("");
+      setSeleccionado(null); setDatos(null);
+      setReferir(false); setLugarReferencia(""); setLugarPersonalizado("");
     } catch (e) { alert("Error: " + e.message); }
     finally { setGuardando(false); }
   };
 
+  const enviarRecibo = async () => {
+    if (!reciboForm.nombre_pagador.trim()) { alert("El nombre del pagador es requerido."); return; }
+    setEnviandoRecibo(true);
+    try {
+      const res = await fetch("http://localhost:3000/recibos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_paciente: seleccionado.id_paciente, id_usuario: usuario.id_usuario, ...reciboForm })
+      });
+      if (!res.ok) throw new Error("Error del servidor");
+      setShowReciboModal(false);
+      alert("Recibo enviado a Administración. El paciente quedará en estado pendiente hasta su aprobación.");
+      invalidatePacientes();
+      await cargarPacientes();
+      setSeleccionado(null); setDatos(null);
+    } catch (e) { alert("Error al enviar recibo: " + e.message); }
+    finally { setEnviandoRecibo(false); }
+  };
+
   const sidebar = (
     <div className="adm-sidebar">
-      <h2>MARAKAME</h2>
-      <p className="user">ADMISIONES: {usuario.nombre || "—"}</p>
-      <ul>
-        <li onClick={() => navigate("/")}><IcoGrid />Inicio</li>
-        <li onClick={() => navigate("/admisiones")}><IcoHome />Admisiones</li>
-        <li onClick={() => navigate("/pacientes")}><IcoUsers />Pacientes</li>
-        <li onClick={() => navigate("/registro")}><IcoUser />Agregar Paciente</li>
-        <li onClick={() => navigate("/historial")}><IcoFile />Historial clínico</li>
-        <li onClick={() => navigate("/estudio")}><IcoMoney />Estudio Socioeconómico</li>
-        <li onClick={() => navigate("/citas")}><IcoCal />Agenda de Citas</li>
-        <li className="active"><IcoShield />Validación de Ingreso</li>
-        <li onClick={() => navigate("/preingreso")}><IcoDoc />Preingreso</li>
-        <li onClick={() => navigate("/expedientes")}><IcoFolder />Expedientes</li>
-      </ul>
-      <button className="adm-btn" onClick={() => navigate("/registro")}>+ Registro de Paciente</button>
+      <div className="adm-sidebar-top">
+        <h2>MARAKAME</h2>
+        <p className="user">ADMISIONES: {usuario.nombre || "—"}</p>
+      </div>
+      <nav>
+        <ul>
+          <li onClick={() => navigate("/")}><IcoGrid />Inicio</li>
+          <li onClick={() => navigate("/admisiones")}><IcoHome />Admisiones</li>
+          <li onClick={() => navigate("/pacientes")}><IcoUsers />Pacientes</li>
+          <li onClick={() => navigate("/registro")}><IcoUser />Preregistro</li>
+          <li onClick={() => navigate("/historial")}><IcoFile />Historial clínico</li>
+          <li onClick={() => navigate("/estudio")}><IcoMoney />Estudio Socioeconómico</li>
+          <li onClick={() => navigate("/citas")}><IcoCal />Agenda de Citas</li>
+          <li className="active"><IcoShield />Validación de Ingreso</li>
+          <li onClick={() => navigate("/preingreso")}><IcoDoc />Preingreso</li>
+          <li onClick={() => navigate("/expedientes")}><IcoFolder />Expedientes</li>
+        </ul>
+      </nav>
+      <div className="adm-sidebar-bottom">
+        <button className="adm-btn" onClick={() => navigate("/registro")}>+ Registro de Paciente</button>
+      </div>
     </div>
   );
+  const wrap = (m) => embedded ? m : <div className="dashboard">{sidebar}{m}</div>;
 
   // ─── Detalle: loading ───────────────────────────────────
   if (seleccionado && cargandoDetalle) {
-    return (
-      <div className="dashboard">
-        {sidebar}
-        <div className="main" style={{ padding: 40, textAlign: "center", color: "#9ca3af" }}>
+    return wrap(
+      <div className="main" style={{ padding: 40, textAlign: "center", color: "#9ca3af" }}>
           Cargando datos del paciente...
-        </div>
       </div>
     );
   }
@@ -149,8 +203,11 @@ export default function ValidarIngreso() {
     const medicoApto  = v?.apto === 1;
     const medicoNoApto= v?.apto === 0;
     const estudioOk   = e?.status === "enviado";
-    const yaDecidido  = !!dec && dec.decision !== "requiere_valoracion";
+    const yaDecidido    = !!dec && dec.decision !== "requiere_valoracion" && dec.decision !== "pendiente_pago";
+    const pendientePago = dec?.decision === "pendiente_pago";
     const cuestionarioOk = c && (c.total_respuestas >= 5);
+    const numContratos = datos.num_contratos || 0;
+    const contratosOk = numContratos > 0;
     const puedeAprobar = medicoApto && estudioOk;
 
     const pasos = [
@@ -175,27 +232,42 @@ export default function ValidarIngreso() {
         label: medicoNoApto ? "No aplica" : estudioOk ? "Enviado" : e ? "Borrador" : "Pendiente",
         accion: medicoNoApto ? null : {
           label: estudioOk ? "Ver Estudio" : "Llenar Estudio",
-          fn: () => navigate(`/estudio?id=${seleccionado.id_paciente}`)
+          fn: () => onIrEstudio
+            ? onIrEstudio(seleccionado.id_paciente)
+            : navigate(`/estudio?id=${seleccionado.id_paciente}`)
         },
       },
       {
-        num: 4, etapa: "Decisión de Admisión", responsable: "Admisiones",
-        estado: dec ? (dec.decision === "aprobado" ? "ok" : "rechazado") : "pendiente",
-        label: dec ? (dec.decision === "aprobado" ? "Aprobado" : "Rechazado") : "Pendiente",
+        num: 4, etapa: "Documentación / Preingreso", responsable: "Admisiones",
+        estado: contratosOk ? "ok" : "pendiente",
+        label: contratosOk ? `${numContratos} doc(s) firmado(s)` : "Pendiente",
+        accion: {
+          label: contratosOk ? "Ver documentos" : "Subir documentos",
+          fn: () => navigate(`/preingreso`)
+        },
+      },
+      {
+        num: 5, etapa: "Decisión de Admisión", responsable: "Admisiones",
+        estado: dec ? (dec.decision === "aprobado" ? "ok" : dec.decision === "pendiente_pago" ? "en-curso" : "rechazado") : "pendiente",
+        label: dec ? (dec.decision === "aprobado" ? "Aprobado" : dec.decision === "pendiente_pago" ? "Pend. Admin." : "Rechazado") : "Pendiente",
         accion: null,
       },
       {
-        num: 5, etapa: "Traslado Clínico", responsable: "Clínico",
-        estado: dec?.decision === "aprobado" ? "pendiente" : "bloqueado",
-        label: dec?.decision === "aprobado" ? "Pendiente" : "Bloqueado",
+        num: 6, etapa: "Aprobación Administrativa", responsable: "Administración",
+        estado: dec?.decision === "aprobado" ? "ok" : dec?.decision === "pendiente_pago" ? "en-curso" : "bloqueado",
+        label: dec?.decision === "aprobado" ? "Aprobado" : dec?.decision === "pendiente_pago" ? "En revisión" : "Bloqueado",
+        accion: null,
+      },
+      {
+        num: 7, etapa: "Traslado Clínico", responsable: "Clínico",
+        estado: datos.traslado ? "ok" : dec?.decision === "aprobado" ? "pendiente" : "bloqueado",
+        label: datos.traslado ? "Completado" : dec?.decision === "aprobado" ? "Pendiente" : "Bloqueado",
         accion: null,
       },
     ];
 
-    return (
-      <div className="dashboard">
-        {sidebar}
-        <div className="main" style={{ overflowY: "auto" }}>
+    return wrap(
+      <div className="main" style={{ overflowY: "auto" }}>
           {/* Header */}
           <div className="header">
             <button onClick={() => { setSeleccionado(null); setDatos(null); }} style={{ background: "none", border: "none", color: "#0b5d5b", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>← Volver</button>
@@ -281,6 +353,14 @@ export default function ValidarIngreso() {
               </div>
             )}
 
+            {/* Pendiente aprobación admin */}
+            {pendientePago && (
+              <div style={{ padding: 20, borderRadius: 10, textAlign: "center", marginBottom: 20, background: "#fffbeb", border: "1px solid #fde68a" }}>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "#92400e" }}>⏳ Esperando aprobación de Administración</div>
+                <div style={{ fontSize: 13, color: "#78350f", marginTop: 6 }}>El recibo de pago fue enviado. Administración debe aprobarlo para continuar el proceso.</div>
+              </div>
+            )}
+
             {/* Decision ya tomada */}
             {yaDecidido && (
               <div style={{
@@ -291,6 +371,23 @@ export default function ValidarIngreso() {
               }}>
                 {dec.decision === "aprobado" ? "✓ Ingreso Aprobado" : "✗ Ingreso Rechazado"}
                 {dec.motivo_rechazo && <p style={{ fontSize: 13, marginTop: 6, fontWeight: 400 }}>{dec.motivo_rechazo}</p>}
+                {dec.decision === "rechazado" && (
+                  <div style={{ marginTop: 14 }}>
+                    <button
+                      onClick={cerrarCaso}
+                      style={{
+                        padding: "9px 22px", background: "#fff", color: "#ef4444",
+                        border: "1.5px solid #ef4444", borderRadius: 8,
+                        fontSize: 13, fontWeight: 700, cursor: "pointer",
+                      }}
+                    >
+                      🗂 Cerrar Caso (archivar definitivamente)
+                    </button>
+                    <p style={{ fontSize: 11, color: "#9ca3af", fontWeight: 400, marginTop: 6 }}>
+                      El paciente dejará de aparecer en todos los listados del sistema.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -317,7 +414,7 @@ export default function ValidarIngreso() {
                   >
                     <span style={{ fontSize: 20 }}>✓</span>
                     Aprobar ingreso
-                    {!puedeAprobar && <span style={{ fontSize: 10, fontWeight: 400 }}>Requiere médico apto + estudio</span>}
+                    {!puedeAprobar && <span style={{ fontSize: 10, fontWeight: 400 }}>{!medicoApto ? "Requiere médico apto" : !estudioOk ? "+ estudio" : "Falta documentación"}</span>}
                   </button>
                   <button
                     onClick={() => setDecision("rechazado")}
@@ -405,29 +502,121 @@ export default function ValidarIngreso() {
                   disabled={guardando || !decision || (decision === "aprobado" && !puedeAprobar)}
                   style={{ width: "100%", padding: 13, background: "#0b5d5b", color: "#fff", border: "none", borderRadius: 8, fontSize: 15, fontWeight: 700, cursor: "pointer" }}
                 >
-                  {guardando ? "Guardando..." : "Guardar decisión"}
+                  {guardando ? "Guardando..." : decision === "aprobado" ? "Continuar → Generar Recibo" : "Guardar decisión"}
                 </button>
               </div>
             )}
           </div>
-        </div>
+
+          {/* ── Modal Recibo de Pago ── */}
+          {showReciboModal && (
+            <>
+              <div onClick={() => setShowReciboModal(false)} style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:900 }} />
+              <div style={{ position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"min(760px,95vw)",maxHeight:"90vh",overflowY:"auto",background:"#fff",borderRadius:14,zIndex:901,padding:28 }}>
+                <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20 }}>
+                  <div>
+                    <h3 style={{ margin:0,fontSize:18,fontWeight:800,color:"#111827" }}>Recibo de Pago</h3>
+                    <p style={{ margin:"4px 0 0",fontSize:12,color:"#6b7280" }}>INSTITUTO MARAKAME — R.F.C. MAR-080325-RRA</p>
+                  </div>
+                  <button onClick={() => setShowReciboModal(false)} style={{ background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#9ca3af" }}>×</button>
+                </div>
+
+                {(() => {
+                  const rf = reciboForm;
+                  const set = (k) => (e) => setReciboForm(p => ({ ...p, [k]: e.target.value }));
+                  const fld = (label, key, type="text", placeholder="") => (
+                    <div className="est-field" style={{ marginBottom:12 }}>
+                      <label style={{ fontSize:10,fontWeight:700,color:"#6b7280",textTransform:"uppercase",display:"block",marginBottom:4 }}>{label}</label>
+                      <input type={type} value={rf[key]} onChange={set(key)} placeholder={placeholder}
+                        style={{ width:"100%",padding:"8px 12px",border:"1px solid #e5e7eb",borderRadius:8,fontSize:13,boxSizing:"border-box",fontFamily:"inherit" }} />
+                    </div>
+                  );
+                  const total = (parseFloat(rf.monto_tratamiento)||0) + (parseFloat(rf.monto_familiar)||0);
+                  return (
+                    <>
+                      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
+                        {fld("1. Nombre de quien paga","nombre_pagador","text","Nombre completo")}
+                        {fld("2. Fecha del pago","fecha_pago","date")}
+                      </div>
+                      {fld("3. Domicilio de quien paga","domicilio","text","Calle, Número, Colonia, Ciudad")}
+                      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12 }}>
+                        {fld("4. Código Postal","cp","text","00000")}
+                        {fld("5. RFC","rfc","text","RFC del pagador")}
+                        {fld("6. Teléfono","telefono","text","10 dígitos")}
+                      </div>
+                      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
+                        {fld("7. Nombre del paciente","nombre_paciente_recibo","text")}
+                        {fld("8. Clave del paciente","clave_paciente","text")}
+                      </div>
+                      <div className="est-field" style={{ marginBottom:12 }}>
+                        <label style={{ fontSize:10,fontWeight:700,color:"#6b7280",textTransform:"uppercase",display:"block",marginBottom:4 }}>9. Concepto</label>
+                        <textarea value={rf.concepto} onChange={set("concepto")} rows={2}
+                          style={{ width:"100%",padding:"8px 12px",border:"1px solid #e5e7eb",borderRadius:8,fontSize:13,boxSizing:"border-box",fontFamily:"inherit",resize:"vertical" }} />
+                      </div>
+                      <div style={{ background:"#f9fafb",border:"1px solid #e5e7eb",borderRadius:10,padding:16,marginBottom:12 }}>
+                        <div style={{ fontSize:11,fontWeight:700,color:"#6b7280",textTransform:"uppercase",marginBottom:10 }}>10. Pagos</div>
+                        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
+                          <div>
+                            <label style={{ fontSize:11,color:"#374151",fontWeight:600,display:"block",marginBottom:4 }}>Tratamiento ($)</label>
+                            <input type="number" min="0" value={rf.monto_tratamiento} onChange={set("monto_tratamiento")} placeholder="0.00"
+                              style={{ width:"100%",padding:"8px 12px",border:"1px solid #e5e7eb",borderRadius:8,fontSize:13,boxSizing:"border-box" }} />
+                          </div>
+                          <div>
+                            <label style={{ fontSize:11,color:"#374151",fontWeight:600,display:"block",marginBottom:4 }}>Programa Familiar ($)</label>
+                            <input type="number" min="0" value={rf.monto_familiar} onChange={set("monto_familiar")} placeholder="0.00"
+                              style={{ width:"100%",padding:"8px 12px",border:"1px solid #e5e7eb",borderRadius:8,fontSize:13,boxSizing:"border-box" }} />
+                          </div>
+                        </div>
+                        <div style={{ marginTop:10,textAlign:"right",fontSize:14,fontWeight:700,color:"#111827" }}>
+                          12. Total: ${total.toFixed(2)}
+                        </div>
+                      </div>
+                      {fld("11. Cantidad con letra","cantidad_letra","text","Ej: Dos mil pesos 00/100 M.N.")}
+                      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
+                        {fld("13. Nombre Responsable de Admisiones","firma_responsable","text","Quien recibe el pago")}
+                        {fld("14. Nombre del Aval (quien paga)","firma_aval","text","Nombre y firma")}
+                      </div>
+                      <div style={{ display:"flex",gap:10,marginTop:8 }}>
+                        <button onClick={() => setShowReciboModal(false)} style={{ flex:1,padding:12,background:"#f3f4f6",color:"#374151",border:"none",borderRadius:8,fontSize:14,fontWeight:600,cursor:"pointer" }}>
+                          Cancelar
+                        </button>
+                        <button onClick={enviarRecibo} disabled={enviandoRecibo}
+                          style={{ flex:2,padding:12,background:"#0b5d5b",color:"#fff",border:"none",borderRadius:8,fontSize:14,fontWeight:700,cursor:"pointer" }}>
+                          {enviandoRecibo ? "Enviando..." : "Enviar a Administración →"}
+                        </button>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            </>
+          )}
       </div>
     );
   }
 
   // ─── Lista de pacientes ─────────────────────────────────
-  const filtrados = pacientes.filter(p =>
-    !busqueda.trim() || `${p.nombre} ${p.apellido}`.toLowerCase().includes(busqueda.toLowerCase())
-  );
+  const filtrados = pacientes.filter(p => {
+    const q = busqueda.trim().toLowerCase();
+    if (q && !`${p.nombre} ${p.apellido}`.toLowerCase().includes(q)) return false;
+    if (filtroLista === "pendientes") return !p.decision || p.decision === "requiere_valoracion" || p.decision === "pendiente_pago";
+    if (filtroLista === "aprobados")  return p.decision === "aprobado";
+    if (filtroLista === "rechazados") return p.decision === "rechazado" || p.apto === 0;
+    return true;
+  });
+
+  const cntFiltro = (f) => pacientes.filter(p =>
+    f === "pendientes"  ? (!p.decision || p.decision === "requiere_valoracion") :
+    f === "aprobados"   ? p.decision === "aprobado" :
+    p.decision === "rechazado" || p.apto === 0
+  ).length;
 
   const bk = (bg, color, text) => (
     <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 8, background: bg, color, whiteSpace: "nowrap" }}>{text}</span>
   );
 
-  return (
-    <div className="dashboard">
-      {sidebar}
-      <div className="main" style={{ overflowY: "auto" }}>
+  return wrap(
+    <div className="main" style={{ overflowY: "auto" }}>
         <div className="header">
           <h3>Validación de Ingreso</h3>
           <input
@@ -435,6 +624,31 @@ export default function ValidarIngreso() {
             value={busqueda}
             onChange={e => setBusqueda(e.target.value)}
           />
+        </div>
+
+        {/* Filtros */}
+        <div style={{ padding: "12px 24px 0", display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {[
+            ["todos",      "Todos",     "#6b7280"],
+            ["pendientes", "Pendientes","#d97706"],
+            ["aprobados",  "Aprobados", "#0b5d5b"],
+            ["rechazados", "Rechazados","#ef4444"],
+          ].map(([val, label, dot]) => (
+            <button
+              key={val}
+              onClick={() => setFiltroLista(val)}
+              style={{
+                padding: "6px 16px", borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: "pointer",
+                background: filtroLista === val ? dot : "#fff",
+                color: filtroLista === val ? "#fff" : "#374151",
+                border: `1px solid ${filtroLista === val ? dot : "#e5e7eb"}`,
+                display: "flex", alignItems: "center", gap: 6,
+              }}
+            >
+              {filtroLista !== val && <span style={{ width: 8, height: 8, borderRadius: "50%", background: dot, display: "inline-block" }} />}
+              {label}{val !== "todos" ? ` (${cntFiltro(val)})` : ` (${pacientes.length})`}
+            </button>
+          ))}
         </div>
 
         <div style={{ padding: "16px 24px" }}>
@@ -473,7 +687,6 @@ export default function ValidarIngreso() {
             </table>
           </div>
         </div>
-      </div>
     </div>
   );
 }

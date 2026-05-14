@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import GlobalAlert from "./components/GlobalAlert.jsx";
 
 import Login from "./pages/login/Login.jsx";
 import Admisiones from "./pages/admisiones/Admisiones.jsx";
@@ -19,9 +20,11 @@ import Preingreso from "./pages/preingreso/Preingreso.jsx";
 import Citas from "./pages/citas/Citas.jsx";
 import Pacientes from "./pages/admisiones/Pacientes/Pacientes.jsx";
 import Expedientes from "./pages/admisiones/Expedientes/Expedientes.jsx";
+import Financiero from "./pages/financiero/Financiero.jsx";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <BrowserRouter>
+    <GlobalAlert />
     <Routes>
       <Route path="/" element={<Login />} />
       <Route path="/admisiones" element={<Admisiones />} />
@@ -40,6 +43,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
       <Route path="/citas" element={<Citas />} />
       <Route path="/pacientes" element={<Pacientes />} />
       <Route path="/expedientes" element={<Expedientes />} />
+      <Route path="/financiero" element={<Financiero />} />
     </Routes>
   </BrowserRouter>
 );

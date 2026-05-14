@@ -203,7 +203,7 @@
 /* ── Stat cards ─────────────────────────── */
 .adm-stats {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 14px;
   margin-bottom: 18px;
 }
@@ -286,10 +286,9 @@
 
 .adm-bars-wrap {
   display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  height: 120px;
-  padding-bottom: 0;
+  align-items: stretch;
+  gap: 8px;
+  height: 140px;
 }
 
 .adm-bar-group {
@@ -300,22 +299,32 @@
   gap: 4px;
 }
 
-.adm-bar-block {
+.adm-bar-col {
+  flex: 1;
   width: 100%;
-  border-radius: 5px 5px 0 0;
   display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding-bottom: 4px;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.adm-bar-num {
   font-size: 10px;
   font-weight: 700;
-  color: #fff;
-  min-height: 20px;
+  color: #374151;
+  margin-bottom: 3px;
+}
+
+.adm-bar-block {
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+  min-height: 4px;
 }
 
 .adm-bar-x {
   font-size: 10px;
   color: #9ca3af;
+  line-height: 1.6;
 }
 
 .adm-legend {

@@ -1,10 +1,13 @@
 const express = require('express');
 const cors = require('cors');
 const sql = require('mssql/msnodesqlv8');
+const path = require('path');
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ limit: '5mb', extended: true }));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const authRoutes = require('./routes/auth.routes');
 app.use('/', authRoutes);
@@ -22,8 +25,19 @@ const contratoRoutes = require('./routes/contrato.routes');
 app.use('/contratos', contratoRoutes);
 
 const config = {
-    connectionString: "Driver={ODBC Driver 17 for SQL Server};Server=localhost\\SQLEXPRESS;Database=MARAKAMEV1;Trusted_Connection=yes;"
+    connectionString: "Driver={ODBC Driver 17 for SQL Server};Server=localhost\\SQLEXPRESS;Database=MARAKAMEV1;Trusted_Connection=yes;",
+    pool: { max: 10, min: 2, idleTimeoutMillis: 30000 },
+    requestTimeout: 60000,
+    connectionTimeout: 15000,
 };
+
+// Caché en memoria para /pacientes-admision (se invalida al crear/editar/archivar pacientes)
+let _pacCache = null;
+let _pacCacheTs = 0;
+const PAC_TTL = 8000; // 8 segundos
+const getPacCache  = ()     => _pacCache && (Date.now() - _pacCacheTs < PAC_TTL) ? _pacCache : null;
+const setPacCache  = (data) => { _pacCache = data; _pacCacheTs = Date.now(); };
+const clearPacCache = ()    => { _pacCache = null; };
 
 let pool;
 
@@ -48,6 +62,122 @@ sql.connect(config)
                 observaciones NVARCHAR(500)
             )
         `).catch(e => console.error("Error creando RecepcionPaciente:", e));
+
+        // Asegurar preguntas extendidas del solicitante
+        pool.request().query(`
+            SET IDENTITY_INSERT Pregunta ON
+            IF NOT EXISTS (SELECT 1 FROM Pregunta WHERE id_pregunta = 32)
+                INSERT INTO Pregunta (id_pregunta, texto, tipo) VALUES (32, 'Género del solicitante', 'registro')
+            IF NOT EXISTS (SELECT 1 FROM Pregunta WHERE id_pregunta = 33)
+                INSERT INTO Pregunta (id_pregunta, texto, tipo) VALUES (33, 'Fecha de nacimiento del solicitante', 'registro')
+            IF NOT EXISTS (SELECT 1 FROM Pregunta WHERE id_pregunta = 34)
+                INSERT INTO Pregunta (id_pregunta, texto, tipo) VALUES (34, 'Estado civil del solicitante', 'registro')
+            IF NOT EXISTS (SELECT 1 FROM Pregunta WHERE id_pregunta = 35)
+                INSERT INTO Pregunta (id_pregunta, texto, tipo) VALUES (35, 'Escolaridad del solicitante', 'registro')
+            SET IDENTITY_INSERT Pregunta OFF
+        `).catch(e => console.error("Error insertando preguntas 32-35:", e));
+
+        pool.request().query(`
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Recibo' AND xtype='U')
+            CREATE TABLE Recibo (
+                id_recibo INT PRIMARY KEY IDENTITY,
+                id_paciente INT NOT NULL,
+                id_usuario INT,
+                fecha DATETIME DEFAULT GETDATE(),
+                nombre_pagador NVARCHAR(200),
+                domicilio NVARCHAR(300),
+                cp NVARCHAR(20),
+                rfc NVARCHAR(50),
+                telefono NVARCHAR(30),
+                clave_paciente NVARCHAR(50),
+                concepto NVARCHAR(500),
+                monto_tratamiento DECIMAL(10,2) DEFAULT 0,
+                monto_familiar DECIMAL(10,2) DEFAULT 0,
+                total DECIMAL(10,2) DEFAULT 0,
+                cantidad_letra NVARCHAR(300),
+                validado BIT DEFAULT 0,
+                fecha_validacion DATETIME,
+                id_usuario_valido INT
+            )
+        `).catch(e => console.error("Error creando Recibo:", e));
+
+        pool.request().query(`
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('Paciente') AND name='archivado')
+                ALTER TABLE Paciente ADD archivado BIT NOT NULL DEFAULT 0
+        `).catch(e => console.error("Error migrando columna archivado:", e));
+
+        // Índices para acelerar /pacientes-admision
+        pool.request().query(`
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_Cuestionario_Paciente' AND object_id=OBJECT_ID('Cuestionario'))
+                CREATE INDEX IX_Cuestionario_Paciente ON Cuestionario(id_paciente, id_cuestionario DESC);
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_Estudio_Paciente' AND object_id=OBJECT_ID('EstudioSocioeconomico'))
+                CREATE INDEX IX_Estudio_Paciente ON EstudioSocioeconomico(id_paciente, id_estudio DESC);
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_Valoracion_Paciente' AND object_id=OBJECT_ID('ValoracionMedica'))
+                CREATE INDEX IX_Valoracion_Paciente ON ValoracionMedica(id_paciente, fecha_valoracion DESC);
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_Decision_Paciente' AND object_id=OBJECT_ID('DecisionIngreso'))
+                CREATE INDEX IX_Decision_Paciente ON DecisionIngreso(id_paciente, fecha DESC);
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_Paciente_Archivado' AND object_id=OBJECT_ID('Paciente'))
+                CREATE INDEX IX_Paciente_Archivado ON Paciente(archivado, id_paciente DESC);
+        `).catch(e => console.error("Error creando índices:", e));
+
+        pool.request().query(`
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='HistoriaMedica' AND xtype='U')
+            CREATE TABLE HistoriaMedica (
+                id_historia INT PRIMARY KEY IDENTITY,
+                id_paciente INT NOT NULL UNIQUE,
+                id_usuario INT,
+                fecha DATETIME DEFAULT GETDATE(),
+                fecha_actualizacion DATETIME DEFAULT GETDATE(),
+                datos_json NVARCHAR(MAX),
+                firma_archivo NVARCHAR(500),
+                firma_tipo NVARCHAR(10)
+            )
+        `).catch(e => console.error("Error creando HistoriaMedica:", e));
+
+        pool.request().query(`
+            IF EXISTS (SELECT * FROM sysobjects WHERE name='HistoriaMedica' AND xtype='U')
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('HistoriaMedica') AND name='datos_json')
+                    ALTER TABLE HistoriaMedica ADD datos_json NVARCHAR(MAX)
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('HistoriaMedica') AND name='firma_archivo')
+                    ALTER TABLE HistoriaMedica ADD firma_archivo NVARCHAR(500)
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('HistoriaMedica') AND name='firma_tipo')
+                    ALTER TABLE HistoriaMedica ADD firma_tipo NVARCHAR(10)
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('HistoriaMedica') AND name='fecha_actualizacion')
+                    ALTER TABLE HistoriaMedica ADD fecha_actualizacion DATETIME DEFAULT GETDATE()
+            END
+        `).catch(e => console.error("Error migrando HistoriaMedica:", e));
+
+        pool.request().query(`
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Requisicion' AND xtype='U')
+            CREATE TABLE Requisicion (
+                id_requisicion INT PRIMARY KEY IDENTITY,
+                folio NVARCHAR(50),
+                id_usuario INT,
+                nombre_solicitante NVARCHAR(200),
+                area NVARCHAR(100) DEFAULT 'Admisiones',
+                fecha DATETIME DEFAULT GETDATE(),
+                observaciones NVARCHAR(500),
+                total DECIMAL(10,2) DEFAULT 0,
+                estado VARCHAR(20) DEFAULT 'pendiente',
+                items_json NVARCHAR(MAX)
+            )
+        `).catch(e => console.error("Error creando Requisicion:", e));
+
+        pool.request().query(`
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('Recibo') AND name='estado')
+                ALTER TABLE Recibo ADD estado VARCHAR(20) DEFAULT 'pendiente'
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('Recibo') AND name='nombre_paciente_recibo')
+                ALTER TABLE Recibo ADD nombre_paciente_recibo NVARCHAR(200) NULL
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('Recibo') AND name='firma_responsable')
+                ALTER TABLE Recibo ADD firma_responsable NVARCHAR(200) NULL
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('Recibo') AND name='firma_aval')
+                ALTER TABLE Recibo ADD firma_aval NVARCHAR(200) NULL
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('Recibo') AND name='observaciones_admin')
+                ALTER TABLE Recibo ADD observaciones_admin NVARCHAR(MAX) NULL
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('Recibo') AND name='fecha_pago')
+                ALTER TABLE Recibo ADD fecha_pago DATE NULL
+        `).catch(e => console.error("Error migrando columnas de Recibo:", e));
     })
     .catch(err => console.log(err));
 
@@ -85,10 +215,25 @@ app.post("/pacientes", async (req, res) => {
                 VALUES (@nombre, @apellido, @edad, @estado_civil, @direccion, @escolaridad, @telefono, @ocupacion, @fecha_nacimiento, @genero)
             `);
 
+        clearPacCache();
         res.json(result.recordset[0]);
     } catch (err) {
         console.error(err);
         res.status(500).send("Error al crear paciente");
+    }
+});
+
+// ARCHIVAR PACIENTE (cerrar caso definitivamente)
+app.put("/pacientes/:id/archivar", async (req, res) => {
+    try {
+        await pool.request()
+            .input('id', sql.Int, parseInt(req.params.id))
+            .query('UPDATE Paciente SET archivado = 1 WHERE id_paciente = @id');
+        clearPacCache();
+        res.json({ ok: true });
+    } catch (err) {
+        console.error("Error archivando paciente:", err.message);
+        res.status(500).send("Error al archivar paciente");
     }
 });
 
@@ -128,6 +273,7 @@ app.put("/pacientes/:id", async (req, res) => {
                 .input('genero', genero || null)
                 .query(`UPDATE Paciente SET nombre=@nombre, apellido=@apellido, edad=@edad, estado_civil=@estado_civil, direccion=@direccion, escolaridad=@escolaridad, telefono=@telefono, ocupacion=@ocupacion, fecha_nacimiento=@fecha_nacimiento, genero=@genero WHERE id_paciente=@id`);
         }
+        clearPacCache();
         res.send("ok");
     } catch(err) {
         console.error(err);
@@ -186,15 +332,12 @@ app.post("/ingreso", async (req, res) => {
             await transaction.request()
                 .input('id_cuestionario', id_cuestionario)
                 .query(`DELETE FROM RespuestaCuestionario WHERE id_cuestionario = @id_cuestionario`);
-            for (let r of respuestas) {
+            for (const r of respuestas) {
                 await transaction.request()
                     .input('id_cuestionario', id_cuestionario)
                     .input('id_pregunta', r.id_pregunta)
-                    .input('respuesta', r.respuesta)
-                    .query(`
-                        INSERT INTO RespuestaCuestionario (id_cuestionario, id_pregunta, respuesta)
-                        VALUES (@id_cuestionario, @id_pregunta, @respuesta)
-                    `);
+                    .input('respuesta', r.respuesta ?? null)
+                    .query(`INSERT INTO RespuestaCuestionario (id_cuestionario, id_pregunta, respuesta) VALUES (@id_cuestionario, @id_pregunta, @respuesta)`);
             }
             await transaction.commit();
         } catch (innerErr) {
@@ -202,17 +345,14 @@ app.post("/ingreso", async (req, res) => {
             throw innerErr;
         }
 
-        // Notificar a todos los médicos (fuera del try de la transacción)
+        // Notificar a todos los médicos
         try {
             const medicos = await pool.request().query(`SELECT id_usuario FROM Usuario WHERE id_rol = 4`);
             for (const m of medicos.recordset) {
                 await pool.request()
                     .input('id_usuario_destino', m.id_usuario)
                     .input('id_referencia', id_cuestionario)
-                    .query(`
-                        INSERT INTO Notificacion (id_usuario_destino, tipo, mensaje, id_referencia, tabla_referencia)
-                        VALUES (@id_usuario_destino, 'nuevo_ingreso', 'Nuevo paciente registrado en admisiones requiere valoración médica.', @id_referencia, 'Cuestionario')
-                    `);
+                    .query(`INSERT INTO Notificacion (id_usuario_destino, tipo, mensaje, id_referencia, tabla_referencia) VALUES (@id_usuario_destino, 'nuevo_ingreso', 'Nuevo paciente registrado en admisiones requiere valoración médica.', @id_referencia, 'Cuestionario')`);
             }
         } catch (notifErr) {
             console.error("Error al notificar médicos:", notifErr);
@@ -310,30 +450,59 @@ app.get("/validar-ingreso/:id_paciente", async (req, res) => {
     const id = parseInt(req.params.id_paciente);
     if (isNaN(id)) return res.status(400).send("ID inválido");
     try {
-        const [paciente, cuestionario, valoracion, estudio, familiar] = await Promise.all([
-            pool.request().input('id', sql.Int, id).query(`SELECT * FROM Paciente WHERE id_paciente = @id`),
-            pool.request().input('id', sql.Int, id).query(`SELECT TOP 1 c.id_cuestionario, COUNT(CASE WHEN LTRIM(RTRIM(ISNULL(r.respuesta,''))) <> '' THEN 1 END) as total_respuestas, MAX(CASE WHEN r.id_pregunta = 3 THEN r.respuesta END) as fuente_ingreso FROM Cuestionario c LEFT JOIN RespuestaCuestionario r ON c.id_cuestionario = r.id_cuestionario WHERE c.id_paciente = @id GROUP BY c.id_cuestionario`),
-            pool.request().input('id', sql.Int, id).query(`SELECT TOP 1 v.*, u.nombre as nombre_medico FROM ValoracionMedica v LEFT JOIN Usuario u ON v.id_usuario = u.id_usuario WHERE v.id_paciente = @id ORDER BY v.fecha_valoracion DESC`),
-            pool.request().input('id', sql.Int, id).query(`SELECT TOP 1 * FROM EstudioSocioeconomico WHERE id_paciente = @id ORDER BY id_estudio DESC`),
-            pool.request().input('id', sql.Int, id).query(`SELECT TOP 1 * FROM Familiar WHERE id_paciente = @id ORDER BY id_familiar ASC`),
-        ]);
-
-        let decision = null;
-        try {
-            const decRes = await pool.request().input('id', sql.Int, id).query(`SELECT TOP 1 * FROM DecisionIngreso WHERE id_paciente = @id ORDER BY fecha DESC`);
-            decision = decRes.recordset[0] || null;
-        } catch (e) { /* tabla aún no existe */ }
-
-        const val = valoracion.recordset[0] || null;
-        if (val && val.apto !== null && val.apto !== undefined) val.apto = Number(val.apto);
-
+        // Una sola query con OUTER APPLY en lugar de 6-8 queries paralelas
+        const main = await pool.request().input('id', sql.Int, id).query(`
+            SELECT
+                p.*,
+                c.id_cuestionario, c.total_respuestas, c.fuente_ingreso,
+                CAST(v.apto AS INT) AS apto, v.observaciones AS obs_medico,
+                v.id_valoracion, v.nombre_medico,
+                e.id_estudio, e.status AS estudio_status, e.datos_json AS estudio_json,
+                d.id_decision, d.decision, d.motivo_rechazo, d.fecha AS fecha_decision,
+                f.id_familiar, f.nombre AS fam_nombre, f.telefono AS fam_telefono,
+                t.id_traslado, t.fecha AS fecha_traslado,
+                ISNULL(ct.num_contratos, 0) AS num_contratos
+            FROM Paciente p
+            OUTER APPLY (
+                SELECT TOP 1 c2.id_cuestionario,
+                    COUNT(CASE WHEN LTRIM(RTRIM(ISNULL(r.respuesta,''))) <> '' THEN 1 END) AS total_respuestas,
+                    MAX(CASE WHEN r.id_pregunta=3 THEN r.respuesta END) AS fuente_ingreso
+                FROM Cuestionario c2
+                LEFT JOIN RespuestaCuestionario r ON c2.id_cuestionario=r.id_cuestionario
+                WHERE c2.id_paciente=p.id_paciente
+                GROUP BY c2.id_cuestionario
+                ORDER BY c2.id_cuestionario DESC
+            ) c
+            OUTER APPLY (
+                SELECT TOP 1 v2.id_valoracion, v2.apto, v2.observaciones, u.nombre AS nombre_medico
+                FROM ValoracionMedica v2
+                LEFT JOIN Usuario u ON v2.id_usuario=u.id_usuario
+                WHERE v2.id_paciente=p.id_paciente ORDER BY v2.fecha_valoracion DESC
+            ) v
+            OUTER APPLY (SELECT TOP 1 id_estudio, status, datos_json FROM EstudioSocioeconomico WHERE id_paciente=p.id_paciente ORDER BY id_estudio DESC) e
+            OUTER APPLY (SELECT TOP 1 id_decision, decision, motivo_rechazo, fecha FROM DecisionIngreso WHERE id_paciente=p.id_paciente ORDER BY fecha DESC) d
+            OUTER APPLY (SELECT TOP 1 id_familiar, nombre, telefono FROM Familiar WHERE id_paciente=p.id_paciente ORDER BY id_familiar ASC) f
+            OUTER APPLY (SELECT TOP 1 id_traslado, fecha FROM Traslado WHERE id_paciente=p.id_paciente ORDER BY id_traslado DESC) t
+            OUTER APPLY (SELECT COUNT(*) AS num_contratos FROM Contrato WHERE id_paciente=p.id_paciente) ct
+            WHERE p.id_paciente = @id
+        `);
+        const row = main.recordset[0];
+        if (!row) return res.status(404).send("Paciente no encontrado");
         res.json({
-            paciente: paciente.recordset[0] || null,
-            cuestionario: cuestionario.recordset[0] || null,
-            valoracion: val,
-            estudio: estudio.recordset[0] || null,
-            decision,
-            familiar: familiar.recordset[0] || null
+            paciente: {
+                id_paciente:row.id_paciente, nombre:row.nombre, apellido:row.apellido,
+                edad:row.edad, genero:row.genero, telefono:row.telefono,
+                estado_civil:row.estado_civil, escolaridad:row.escolaridad,
+                ocupacion:row.ocupacion, fecha_nacimiento:row.fecha_nacimiento,
+                direccion:row.direccion,
+            },
+            cuestionario: row.id_cuestionario ? { id_cuestionario:row.id_cuestionario, total_respuestas:row.total_respuestas, fuente_ingreso:row.fuente_ingreso } : null,
+            valoracion: row.id_valoracion ? { id_valoracion:row.id_valoracion, apto:row.apto, observaciones:row.obs_medico, nombre_medico:row.nombre_medico } : null,
+            estudio: row.id_estudio ? { id_estudio:row.id_estudio, status:row.estudio_status, datos_json:row.estudio_json } : null,
+            decision: row.id_decision ? { id_decision:row.id_decision, decision:row.decision, motivo_rechazo:row.motivo_rechazo, fecha:row.fecha_decision } : null,
+            familiar: row.id_familiar ? { id_familiar:row.id_familiar, nombre:row.fam_nombre, telefono:row.fam_telefono } : null,
+            traslado: row.id_traslado ? { id_traslado:row.id_traslado, fecha:row.fecha_traslado } : null,
+            num_contratos: row.num_contratos || 0,
         });
     } catch (err) {
         console.error(err);
@@ -387,62 +556,54 @@ app.post("/validar-ingreso", async (req, res) => {
     }
 });
 
-// PACIENTES PARA ADMISIONES (subqueries para evitar duplicados por JOINs múltiples)
+// PACIENTES PARA ADMISIONES — OUTER APPLY con TOP 1 (más rápido que ROW_NUMBER)
 app.get("/pacientes-admision", async (req, res) => {
-    const intentos = [
-        // Con todo: subqueries para cuestionario, estudio, decision (sin duplicados)
-        `SELECT p.id_paciente, p.nombre, p.apellido, p.edad, p.genero, p.telefono, p.estado_civil, p.escolaridad, p.ocupacion, p.fecha_nacimiento,
-                (SELECT TOP 1 id_cuestionario FROM Cuestionario WHERE id_paciente = p.id_paciente ORDER BY id_cuestionario DESC) as id_cuestionario,
-                (SELECT COUNT(CASE WHEN r.id_pregunta BETWEEN 3 AND 25 AND LTRIM(RTRIM(ISNULL(r.respuesta,''))) <> '' THEN 1 END) FROM RespuestaCuestionario r INNER JOIN Cuestionario c ON r.id_cuestionario = c.id_cuestionario WHERE c.id_paciente = p.id_paciente) as total_respuestas,
-                (SELECT COUNT(CASE WHEN r.id_pregunta BETWEEN 20 AND 25 AND LTRIM(RTRIM(ISNULL(r.respuesta,''))) <> '' THEN 1 END) FROM RespuestaCuestionario r INNER JOIN Cuestionario c ON r.id_cuestionario = c.id_cuestionario WHERE c.id_paciente = p.id_paciente) as sec4_count,
-                (SELECT TOP 1 id_estudio FROM EstudioSocioeconomico WHERE id_paciente = p.id_paciente ORDER BY id_estudio DESC) as id_estudio,
-                (SELECT TOP 1 status FROM EstudioSocioeconomico WHERE id_paciente = p.id_paciente ORDER BY id_estudio DESC) as estudio_status,
-                (SELECT TOP 1 CAST(apto AS INT) FROM ValoracionMedica WHERE id_paciente = p.id_paciente ORDER BY fecha_valoracion DESC) as apto,
-                (SELECT TOP 1 decision FROM DecisionIngreso WHERE id_paciente = p.id_paciente ORDER BY fecha DESC) as decision
-         FROM Paciente p
-         ORDER BY p.id_paciente DESC`,
-        // Sin DecisionIngreso
-        `SELECT p.id_paciente, p.nombre, p.apellido, p.edad, p.genero, p.telefono, p.estado_civil, p.escolaridad, p.ocupacion, p.fecha_nacimiento,
-                (SELECT TOP 1 id_cuestionario FROM Cuestionario WHERE id_paciente = p.id_paciente ORDER BY id_cuestionario DESC) as id_cuestionario,
-                (SELECT COUNT(CASE WHEN r.id_pregunta BETWEEN 3 AND 25 AND LTRIM(RTRIM(ISNULL(r.respuesta,''))) <> '' THEN 1 END) FROM RespuestaCuestionario r INNER JOIN Cuestionario c ON r.id_cuestionario = c.id_cuestionario WHERE c.id_paciente = p.id_paciente) as total_respuestas,
-                (SELECT COUNT(CASE WHEN r.id_pregunta BETWEEN 20 AND 25 AND LTRIM(RTRIM(ISNULL(r.respuesta,''))) <> '' THEN 1 END) FROM RespuestaCuestionario r INNER JOIN Cuestionario c ON r.id_cuestionario = c.id_cuestionario WHERE c.id_paciente = p.id_paciente) as sec4_count,
-                (SELECT TOP 1 id_estudio FROM EstudioSocioeconomico WHERE id_paciente = p.id_paciente ORDER BY id_estudio DESC) as id_estudio,
-                (SELECT TOP 1 status FROM EstudioSocioeconomico WHERE id_paciente = p.id_paciente ORDER BY id_estudio DESC) as estudio_status,
-                (SELECT TOP 1 CAST(apto AS INT) FROM ValoracionMedica WHERE id_paciente = p.id_paciente ORDER BY fecha_valoracion DESC) as apto,
-                NULL as decision
-         FROM Paciente p
-         ORDER BY p.id_paciente DESC`,
-        // Sin EstudioSocioeconomico
-        `SELECT p.id_paciente, p.nombre, p.apellido, p.edad, p.genero, p.telefono, p.estado_civil, p.escolaridad, p.ocupacion, p.fecha_nacimiento,
-                (SELECT TOP 1 id_cuestionario FROM Cuestionario WHERE id_paciente = p.id_paciente ORDER BY id_cuestionario DESC) as id_cuestionario,
-                (SELECT COUNT(CASE WHEN r.id_pregunta BETWEEN 3 AND 25 AND LTRIM(RTRIM(ISNULL(r.respuesta,''))) <> '' THEN 1 END) FROM RespuestaCuestionario r INNER JOIN Cuestionario c ON r.id_cuestionario = c.id_cuestionario WHERE c.id_paciente = p.id_paciente) as total_respuestas,
-                (SELECT COUNT(CASE WHEN r.id_pregunta BETWEEN 20 AND 25 AND LTRIM(RTRIM(ISNULL(r.respuesta,''))) <> '' THEN 1 END) FROM RespuestaCuestionario r INNER JOIN Cuestionario c ON r.id_cuestionario = c.id_cuestionario WHERE c.id_paciente = p.id_paciente) as sec4_count,
-                NULL as id_estudio, NULL as estudio_status,
-                (SELECT TOP 1 CAST(apto AS INT) FROM ValoracionMedica WHERE id_paciente = p.id_paciente ORDER BY fecha_valoracion DESC) as apto,
-                NULL as decision
-         FROM Paciente p
-         ORDER BY p.id_paciente DESC`,
-        // Sin ValoracionMedica
-        `SELECT p.id_paciente, p.nombre, p.apellido, p.edad, p.genero, p.telefono, p.estado_civil, p.escolaridad, p.ocupacion, p.fecha_nacimiento,
-                (SELECT TOP 1 id_cuestionario FROM Cuestionario WHERE id_paciente = p.id_paciente ORDER BY id_cuestionario DESC) as id_cuestionario,
-                (SELECT COUNT(CASE WHEN r.id_pregunta BETWEEN 3 AND 25 AND LTRIM(RTRIM(ISNULL(r.respuesta,''))) <> '' THEN 1 END) FROM RespuestaCuestionario r INNER JOIN Cuestionario c ON r.id_cuestionario = c.id_cuestionario WHERE c.id_paciente = p.id_paciente) as total_respuestas,
-                (SELECT COUNT(CASE WHEN r.id_pregunta BETWEEN 20 AND 25 AND LTRIM(RTRIM(ISNULL(r.respuesta,''))) <> '' THEN 1 END) FROM RespuestaCuestionario r INNER JOIN Cuestionario c ON r.id_cuestionario = c.id_cuestionario WHERE c.id_paciente = p.id_paciente) as sec4_count,
-                NULL as id_estudio, NULL as estudio_status, NULL as apto, NULL as decision
-         FROM Paciente p
-         ORDER BY p.id_paciente DESC`,
-        // Query mínima — solo la tabla Paciente
-        `SELECT id_paciente, nombre, apellido, edad, genero, telefono, estado_civil, escolaridad, ocupacion, fecha_nacimiento,
-                NULL as id_cuestionario, NULL as total_respuestas, NULL as sec4_count, NULL as id_estudio, NULL as estudio_status, NULL as apto, NULL as decision
-         FROM Paciente ORDER BY id_paciente DESC`
-    ];
-
-    for (const q of intentos) {
+    const cached = getPacCache();
+    if (cached) return res.json(cached);
+    try {
+        const result = await pool.request().query(`
+            SELECT
+                p.id_paciente, p.nombre, p.apellido, p.edad, p.genero, p.telefono,
+                p.estado_civil, p.escolaridad, p.ocupacion, p.fecha_nacimiento,
+                c.id_cuestionario,
+                NULL AS total_respuestas, NULL AS sec4_count,
+                e.id_estudio, e.estudio_status,
+                CAST(v.apto AS INT) AS apto,
+                d.decision
+            FROM Paciente p
+            OUTER APPLY (SELECT TOP 1 id_cuestionario FROM Cuestionario WHERE id_paciente=p.id_paciente ORDER BY id_cuestionario DESC) c
+            OUTER APPLY (SELECT TOP 1 id_estudio, status AS estudio_status FROM EstudioSocioeconomico WHERE id_paciente=p.id_paciente ORDER BY id_estudio DESC) e
+            OUTER APPLY (SELECT TOP 1 apto FROM ValoracionMedica WHERE id_paciente=p.id_paciente ORDER BY fecha_valoracion DESC) v
+            OUTER APPLY (SELECT TOP 1 decision FROM DecisionIngreso WHERE id_paciente=p.id_paciente ORDER BY fecha DESC) d
+            WHERE p.archivado = 0
+            ORDER BY p.id_paciente DESC
+        `);
+        setPacCache(result.recordset);
+        res.json(result.recordset);
+    } catch (err) {
+        console.error("Error pacientes-admision:", err.message);
+        // Fallback mínimo si alguna tabla auxiliar falla
         try {
-            const result = await pool.request().query(q);
-            return res.json(result.recordset);
-        } catch (e) { console.error("Intento fallido pacientes-admision:", e.message); }
+            const r2 = await pool.request().query(`
+                SELECT p.id_paciente, p.nombre, p.apellido, p.edad, p.genero, p.telefono,
+                       p.estado_civil, p.escolaridad, p.ocupacion, p.fecha_nacimiento,
+                       c.id_cuestionario,
+                       NULL AS total_respuestas, NULL AS sec4_count,
+                       NULL AS id_estudio, NULL AS estudio_status, NULL AS apto, NULL AS decision
+                FROM Paciente p
+                LEFT JOIN (
+                    SELECT id_paciente, MAX(id_cuestionario) AS id_cuestionario
+                    FROM Cuestionario GROUP BY id_paciente
+                ) c ON p.id_paciente = c.id_paciente
+                WHERE ISNULL(p.archivado, 0) = 0
+                ORDER BY p.id_paciente DESC
+            `);
+            res.json(r2.recordset);
+        } catch (e2) {
+            console.error("Fallback pacientes-admision:", e2.message);
+            res.status(500).send("Error al obtener pacientes");
+        }
     }
-    res.status(500).send("Error al obtener pacientes");
 });
 
 // =============================================
@@ -454,12 +615,12 @@ app.get("/clinico/pacientes-aprobados", async (req, res) => {
     try {
         const result = await pool.request().query(`
             SELECT p.id_paciente, p.nombre, p.apellido, p.edad,
-                   d.fecha as fecha_aprobacion,
+                   d.fecha AS fecha_aprobacion,
                    t.id_traslado
             FROM Paciente p
-            INNER JOIN DecisionIngreso d ON p.id_paciente = d.id_paciente
-            LEFT JOIN Traslado t ON p.id_paciente = t.id_paciente
-            WHERE d.decision = 'aprobado'
+            OUTER APPLY (SELECT TOP 1 decision, fecha FROM DecisionIngreso WHERE id_paciente=p.id_paciente ORDER BY fecha DESC) d
+            OUTER APPLY (SELECT TOP 1 id_traslado FROM Traslado WHERE id_paciente=p.id_paciente ORDER BY id_traslado DESC) t
+            WHERE d.decision = 'aprobado' AND ISNULL(p.archivado, 0) = 0
             ORDER BY d.fecha DESC
         `);
         res.json(result.recordset);
@@ -546,7 +707,28 @@ app.get("/clinico/notificaciones/:id_usuario", async (req, res) => {
     try {
         const result = await pool.request()
             .input('id', req.params.id_usuario)
-            .query(`SELECT TOP 50 * FROM Notificacion WHERE id_usuario_destino = @id ORDER BY fecha DESC`);
+            .query(`
+                SELECT TOP 50
+                    n.*,
+                    COALESCE(
+                        CASE WHEN n.tabla_referencia = 'ValoracionMedica' THEN p1.nombre + ' ' + ISNULL(p1.apellido,'') END,
+                        CASE WHEN n.tabla_referencia = 'Paciente' THEN p2.nombre + ' ' + ISNULL(p2.apellido,'') END,
+                        CASE WHEN n.tabla_referencia = 'Cuestionario' THEN p3.nombre + ' ' + ISNULL(p3.apellido,'') END
+                    ) AS nombre_paciente,
+                    COALESCE(
+                        CASE WHEN n.tabla_referencia = 'ValoracionMedica' THEN v.id_paciente END,
+                        CASE WHEN n.tabla_referencia = 'Paciente' THEN n.id_referencia END,
+                        CASE WHEN n.tabla_referencia = 'Cuestionario' THEN cu.id_paciente END
+                    ) AS id_paciente
+                FROM Notificacion n
+                LEFT JOIN ValoracionMedica v ON n.tabla_referencia = 'ValoracionMedica' AND n.id_referencia = v.id_valoracion
+                LEFT JOIN Paciente p1 ON n.tabla_referencia = 'ValoracionMedica' AND v.id_paciente = p1.id_paciente
+                LEFT JOIN Paciente p2 ON n.tabla_referencia = 'Paciente' AND n.id_referencia = p2.id_paciente
+                LEFT JOIN Cuestionario cu ON n.tabla_referencia = 'Cuestionario' AND n.id_referencia = cu.id_cuestionario
+                LEFT JOIN Paciente p3 ON n.tabla_referencia = 'Cuestionario' AND cu.id_paciente = p3.id_paciente
+                WHERE n.id_usuario_destino = @id
+                ORDER BY n.fecha DESC
+            `);
         res.json(result.recordset);
     } catch (err) {
         res.status(500).send("Error al obtener notificaciones");
@@ -574,7 +756,7 @@ app.get("/citas", async (req, res) => {
     try {
         const result = await pool.request().query(`
             SELECT c.id_cita, c.id_paciente, c.fecha, c.tipo, c.estado, c.notas, c.duracion, c.especialidad,
-                   p.nombre as nombre_paciente, p.apellido as apellido_paciente
+                   p.nombre as nombre_paciente, p.apellido as apellido_paciente, p.telefono as telefono_paciente
             FROM Cita c
             INNER JOIN Paciente p ON c.id_paciente = p.id_paciente
             ORDER BY c.fecha DESC
@@ -604,7 +786,28 @@ app.post("/citas", async (req, res) => {
                 OUTPUT INSERTED.id_cita
                 VALUES (@id_paciente, @fecha, @tipo, @estado, @duracion, @especialidad, @id_usuario)
             `);
-        res.json({ id_cita: result.recordset[0].id_cita });
+        const id_cita = result.recordset[0].id_cita;
+        // Notify doctors and clinicos about the new appointment
+        try {
+            const pacRes = await pool.request().input('id', sql.Int, parseInt(id_paciente))
+                .query(`SELECT nombre, apellido FROM Paciente WHERE id_paciente = @id`);
+            const pac = pacRes.recordset[0];
+            if (pac) {
+                const nombre = `${pac.nombre} ${pac.apellido}`;
+                const fechaStr = fechaNorm ? fechaNorm.replace('T', ' ').slice(0, 16) : '';
+                const mensaje = `Cita agendada: ${nombre} — ${tipo || 'Sin tipo'}${fechaStr ? ` el ${fechaStr}` : ''}.`;
+                const destinatarios = await pool.request().query(`SELECT id_usuario FROM Usuario WHERE id_rol IN (4, 5)`);
+                for (const u of destinatarios.recordset) {
+                    await pool.request()
+                        .input('dest', u.id_usuario)
+                        .input('ref', parseInt(id_paciente))
+                        .input('msg', mensaje)
+                        .input('tipo', 'cita_nueva')
+                        .query(`INSERT INTO Notificacion (id_usuario_destino, tipo, mensaje, id_referencia, tabla_referencia) VALUES (@dest, @tipo, @msg, @ref, 'Paciente')`);
+                }
+            }
+        } catch (e) { console.error("Error notificando nueva cita:", e); }
+        res.json({ id_cita });
     } catch (err) {
         console.error(err);
         res.status(500).send("Error al crear cita");
@@ -628,30 +831,71 @@ app.put("/citas/:id", async (req, res) => {
                 WHERE id_cita = @id
             `);
 
-        // Paso 3: cuando paciente asiste a cita, notificar a médicos y clínicos
-        if (estado === 'asistio') {
+        // Notificar a médicos y clínicos según el estado de la cita
+        if (estado === 'asistio' || estado === 'cancelada' || estado === 'reprogramada') {
             try {
                 const citaRes = await pool.request().input('id', sql.Int, parseInt(req.params.id))
-                    .query(`SELECT c.id_paciente, p.nombre, p.apellido FROM Cita c INNER JOIN Paciente p ON c.id_paciente = p.id_paciente WHERE c.id_cita = @id`);
+                    .query(`SELECT c.id_paciente, c.fecha, c.tipo, p.nombre, p.apellido FROM Cita c INNER JOIN Paciente p ON c.id_paciente = p.id_paciente WHERE c.id_cita = @id`);
                 const cita = citaRes.recordset[0];
                 if (cita) {
                     const nombre = `${cita.nombre} ${cita.apellido}`;
+                    let tipoNotif, mensaje;
+                    if (estado === 'asistio') {
+                        tipoNotif = 'paciente_citado';
+                        mensaje = `${nombre} acudió a su cita. Realizar valoración inicial.`;
+                    } else if (estado === 'cancelada') {
+                        tipoNotif = 'cita_cancelada';
+                        mensaje = `Cita de ${nombre} fue cancelada.${notas ? ` Motivo: ${notas}` : ''}`;
+                    } else {
+                        tipoNotif = 'cita_reprogramada';
+                        mensaje = `Cita de ${nombre} fue reprogramada.${notas ? ` Nota: ${notas}` : ''}`;
+                    }
                     const destinatarios = await pool.request().query(`SELECT id_usuario FROM Usuario WHERE id_rol IN (4, 5)`);
                     for (const u of destinatarios.recordset) {
                         await pool.request()
                             .input('dest', u.id_usuario)
                             .input('ref', cita.id_paciente)
-                            .input('msg', `Paciente ${nombre} acudió a la cita programada. Estar al pendiente para valoración.`)
-                            .query(`INSERT INTO Notificacion (id_usuario_destino, tipo, mensaje, id_referencia, tabla_referencia) VALUES (@dest, 'paciente_citado', @msg, @ref, 'Paciente')`);
+                            .input('msg', mensaje)
+                            .input('tipo', tipoNotif)
+                            .query(`INSERT INTO Notificacion (id_usuario_destino, tipo, mensaje, id_referencia, tabla_referencia) VALUES (@dest, @tipo, @msg, @ref, 'Paciente')`);
                     }
                 }
-            } catch (e) { console.error("Error notificando cita asistida:", e); }
+            } catch (e) { console.error("Error notificando cambio de cita:", e); }
         }
 
         res.send("ok");
     } catch (err) {
         console.error(err);
         res.status(500).send("Error al actualizar cita");
+    }
+});
+
+// =============================================
+// CUESTIONARIO WORD — todas las preguntas con respuesta opcional
+// =============================================
+app.get("/cuestionario-word/:id_paciente", async (req, res) => {
+    const id = parseInt(req.params.id_paciente);
+    if (isNaN(id)) return res.status(400).send("ID inválido");
+    try {
+        const [pacRes, famRes, cRes] = await Promise.all([
+            pool.request().input('id', sql.Int, id).query(`SELECT * FROM Paciente WHERE id_paciente = @id`),
+            pool.request().input('id', sql.Int, id).query(`SELECT TOP 1 * FROM Familiar WHERE id_paciente = @id ORDER BY id_familiar ASC`),
+            pool.request().input('id', sql.Int, id).query(`SELECT TOP 1 id_cuestionario FROM Cuestionario WHERE id_paciente = @id ORDER BY id_cuestionario DESC`),
+        ]);
+        const id_cuestionario = cRes.recordset[0]?.id_cuestionario || null;
+        let respuestas = [];
+        if (id_cuestionario) {
+            const rRes = await pool.request().input('id_c', sql.Int, id_cuestionario)
+                .query(`SELECT p.id_pregunta, p.texto as pregunta, p.tipo, ISNULL(r.respuesta, '') as respuesta
+                        FROM Pregunta p
+                        LEFT JOIN RespuestaCuestionario r ON p.id_pregunta = r.id_pregunta AND r.id_cuestionario = @id_c
+                        ORDER BY p.id_pregunta`);
+            respuestas = rRes.recordset;
+        }
+        res.json({ paciente: pacRes.recordset[0] || null, familiar: famRes.recordset[0] || null, respuestas });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send("Error al obtener cuestionario");
     }
 });
 
@@ -813,6 +1057,224 @@ app.put("/pacientes/:id/estado", async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).send("Error al actualizar estado");
+    }
+});
+
+// =============================================
+// RECIBOS / MÓDULO FINANCIERO
+// =============================================
+app.post("/recibos", async (req, res) => {
+    const { id_paciente, id_usuario, nombre_pagador, domicilio, cp, rfc, telefono,
+            nombre_paciente_recibo, clave_paciente, concepto, monto_tratamiento,
+            monto_familiar, total, cantidad_letra, firma_responsable, firma_aval, fecha_pago } = req.body;
+    try {
+        const result = await pool.request()
+            .input('id_paciente',           sql.Int,          parseInt(id_paciente))
+            .input('id_usuario',            sql.Int,          id_usuario ? parseInt(id_usuario) : null)
+            .input('nombre_pagador',        sql.NVarChar(200), nombre_pagador || "")
+            .input('domicilio',             sql.NVarChar(300), domicilio || "")
+            .input('cp',                    sql.NVarChar(20),  cp || "")
+            .input('rfc',                   sql.NVarChar(50),  rfc || "")
+            .input('telefono',              sql.NVarChar(30),  telefono || "")
+            .input('nombre_paciente_recibo',sql.NVarChar(200), nombre_paciente_recibo || "")
+            .input('clave_paciente',        sql.NVarChar(50),  clave_paciente || "")
+            .input('concepto',              sql.NVarChar(500), concepto || "")
+            .input('monto_tratamiento',     sql.Decimal(10,2), parseFloat(monto_tratamiento) || 0)
+            .input('monto_familiar',        sql.Decimal(10,2), parseFloat(monto_familiar) || 0)
+            .input('total',                 sql.Decimal(10,2), parseFloat(total) || 0)
+            .input('cantidad_letra',        sql.NVarChar(400), cantidad_letra || "")
+            .input('firma_responsable',     sql.NVarChar(200), firma_responsable || "")
+            .input('firma_aval',            sql.NVarChar(200), firma_aval || "")
+            .input('fecha_pago',            sql.Date,          fecha_pago || null)
+            .query(`INSERT INTO Recibo (id_paciente,id_usuario,nombre_pagador,domicilio,cp,rfc,telefono,
+                    nombre_paciente_recibo,clave_paciente,concepto,monto_tratamiento,monto_familiar,total,
+                    cantidad_letra,firma_responsable,firma_aval,fecha_pago,estado)
+                    OUTPUT INSERTED.id_recibo
+                    VALUES (@id_paciente,@id_usuario,@nombre_pagador,@domicilio,@cp,@rfc,@telefono,
+                    @nombre_paciente_recibo,@clave_paciente,@concepto,@monto_tratamiento,@monto_familiar,
+                    @total,@cantidad_letra,@firma_responsable,@firma_aval,@fecha_pago,'pendiente')`);
+
+        const id_recibo = result.recordset[0].id_recibo;
+
+        // Crear decisión "pendiente_pago" en DecisionIngreso
+        await pool.request()
+            .input('id_paciente', sql.Int, parseInt(id_paciente))
+            .input('id_usuario',  sql.Int, id_usuario ? parseInt(id_usuario) : null)
+            .query(`INSERT INTO DecisionIngreso (id_paciente, id_usuario, decision, motivo_rechazo)
+                    VALUES (@id_paciente, @id_usuario, 'pendiente_pago', NULL)`);
+
+        // Notificar a administradores
+        try {
+            const admins = await pool.request().query(`SELECT u.id_usuario FROM Usuario u JOIN Rol r ON u.id_rol=r.id_rol WHERE r.nombre='administrador'`);
+            for (const a of admins.recordset) {
+                await pool.request()
+                    .input('dest', sql.Int, a.id_usuario)
+                    .input('ref',  sql.Int, parseInt(id_paciente))
+                    .query(`INSERT INTO Notificacion (id_usuario_destino,tipo,mensaje,id_referencia,tabla_referencia)
+                            VALUES (@dest,'recibo_pendiente','Nuevo recibo de pago pendiente de aprobación.',@ref,'Paciente')`);
+            }
+        } catch (e) { console.error("Error notificando admin:", e); }
+
+        res.json({ id_recibo });
+    } catch (err) { console.error(err); res.status(500).send("Error al crear recibo"); }
+});
+
+app.get("/recibos/pendientes", async (req, res) => {
+    try {
+        const result = await pool.request().query(`
+            SELECT r.*,
+                   p.nombre + ' ' + ISNULL(p.apellido,'') AS nombre_paciente_db,
+                   u.nombre AS nombre_creador
+            FROM Recibo r
+            LEFT JOIN Paciente p ON p.id_paciente = r.id_paciente
+            LEFT JOIN Usuario  u ON u.id_usuario  = r.id_usuario
+            WHERE ISNULL(r.estado,'pendiente') = 'pendiente'
+            ORDER BY r.fecha DESC
+        `);
+        res.json(result.recordset);
+    } catch (err) { res.status(500).send("Error al obtener recibos pendientes"); }
+});
+
+app.get("/recibos", async (req, res) => {
+    try {
+        const result = await pool.request().query(`
+            SELECT r.*, p.nombre + ' ' + ISNULL(p.apellido,'') AS nombre_paciente_db
+            FROM Recibo r
+            LEFT JOIN Paciente p ON p.id_paciente = r.id_paciente
+            ORDER BY r.fecha DESC
+        `);
+        res.json(result.recordset);
+    } catch (err) { res.status(500).send("Error al obtener recibos"); }
+});
+
+app.get("/recibos/paciente/:id_paciente", async (req, res) => {
+    try {
+        const result = await pool.request()
+            .input('id', sql.Int, parseInt(req.params.id_paciente))
+            .query(`SELECT * FROM Recibo WHERE id_paciente=@id ORDER BY fecha DESC`);
+        res.json(result.recordset);
+    } catch (err) { res.status(500).send("Error al obtener recibos del paciente"); }
+});
+
+app.put("/recibos/:id/aprobar", async (req, res) => {
+    const { id_usuario, observaciones } = req.body;
+    try {
+        const rec = await pool.request()
+            .input('id', sql.Int, parseInt(req.params.id))
+            .query(`SELECT id_paciente FROM Recibo WHERE id_recibo=@id`);
+        if (!rec.recordset.length) return res.status(404).send("Recibo no encontrado");
+        const id_paciente = rec.recordset[0].id_paciente;
+
+        await pool.request()
+            .input('id',  sql.Int,          parseInt(req.params.id))
+            .input('obs', sql.NVarChar(500), observaciones || null)
+            .input('uid', sql.Int,           id_usuario ? parseInt(id_usuario) : null)
+            .query(`UPDATE Recibo SET estado='aprobado', observaciones_admin=@obs, id_usuario_valido=@uid, fecha_validacion=GETDATE(), validado=1 WHERE id_recibo=@id`);
+
+        await pool.request()
+            .input('id_paciente', sql.Int, id_paciente)
+            .input('id_usuario',  sql.Int, id_usuario ? parseInt(id_usuario) : null)
+            .query(`INSERT INTO DecisionIngreso (id_paciente, id_usuario, decision) VALUES (@id_paciente, @id_usuario, 'aprobado')`);
+
+        const existing = await pool.request().input('id', sql.Int, id_paciente)
+            .query(`SELECT id_expediente FROM Expediente WHERE id_paciente=@id`);
+        if (!existing.recordset.length) {
+            await pool.request().input('id_paciente', sql.Int, id_paciente)
+                .query(`INSERT INTO Expediente (id_paciente, estado) VALUES (@id_paciente, 'admitido')`);
+        }
+
+        const clinicos = await pool.request().query(`SELECT id_usuario FROM Usuario WHERE id_rol=5`);
+        for (const c of clinicos.recordset) {
+            await pool.request()
+                .input('dest', sql.Int, c.id_usuario)
+                .input('ref',  sql.Int, id_paciente)
+                .query(`INSERT INTO Notificacion (id_usuario_destino,tipo,mensaje,id_referencia,tabla_referencia) VALUES (@dest,'ingreso_aprobado','Paciente aprobado para ingreso. Acuda a admisiones para trasladarlo.',@ref,'Paciente')`);
+        }
+
+        res.json({ ok: true });
+    } catch (err) { console.error(err); res.status(500).send("Error al aprobar recibo"); }
+});
+
+app.put("/recibos/:id/rechazar", async (req, res) => {
+    const { id_usuario, observaciones } = req.body;
+    try {
+        const rec = await pool.request()
+            .input('id', sql.Int, parseInt(req.params.id))
+            .query(`SELECT id_paciente FROM Recibo WHERE id_recibo=@id`);
+        if (!rec.recordset.length) return res.status(404).send("Recibo no encontrado");
+        const id_paciente = rec.recordset[0].id_paciente;
+
+        await pool.request()
+            .input('id',  sql.Int,          parseInt(req.params.id))
+            .input('obs', sql.NVarChar(500), observaciones || null)
+            .input('uid', sql.Int,           id_usuario ? parseInt(id_usuario) : null)
+            .query(`UPDATE Recibo SET estado='rechazado', observaciones_admin=@obs, id_usuario_valido=@uid, fecha_validacion=GETDATE() WHERE id_recibo=@id`);
+
+        await pool.request()
+            .input('id_paciente', sql.Int, id_paciente)
+            .input('id_usuario',  sql.Int, id_usuario ? parseInt(id_usuario) : null)
+            .input('obs', sql.NVarChar(500), observaciones || "Recibo rechazado por administración")
+            .query(`INSERT INTO DecisionIngreso (id_paciente, id_usuario, decision, motivo_rechazo) VALUES (@id_paciente, @id_usuario, 'rechazado', @obs)`);
+
+        res.json({ ok: true });
+    } catch (err) { console.error(err); res.status(500).send("Error al rechazar recibo"); }
+});
+
+app.put("/recibos/:id/validar", async (req, res) => {
+    const { id_usuario_valido } = req.body;
+    try {
+        await pool.request()
+            .input('id',         sql.Int, parseInt(req.params.id))
+            .input('id_usuario', sql.Int, id_usuario_valido ? parseInt(id_usuario_valido) : null)
+            .query(`UPDATE Recibo SET validado=1, fecha_validacion=GETDATE(), id_usuario_valido=@id_usuario WHERE id_recibo=@id`);
+        res.json({ ok: true });
+    } catch (err) { res.status(500).send("Error al validar recibo"); }
+});
+
+// =============================================
+// REQUISICIONES DE COMPRA
+// =============================================
+app.post("/requisiciones", async (req, res) => {
+    const { id_usuario, nombre_solicitante, area, observaciones, total, items } = req.body;
+    try {
+        const anio = new Date().getFullYear();
+        const cnt  = await pool.request().input('anio', sql.Int, anio)
+            .query(`SELECT COUNT(*) AS n FROM Requisicion WHERE YEAR(fecha)=@anio`);
+        const num  = String((cnt.recordset[0]?.n || 0) + 1).padStart(4, "0");
+        const folio = `REQ-${anio}-${num}`;
+        const result = await pool.request()
+            .input('folio',              sql.NVarChar(50),  folio)
+            .input('id_usuario',         sql.Int,           id_usuario || null)
+            .input('nombre_solicitante', sql.NVarChar(200), nombre_solicitante || null)
+            .input('area',               sql.NVarChar(100), area || 'Admisiones')
+            .input('observaciones',      sql.NVarChar(500), observaciones || null)
+            .input('total',              sql.Decimal(10,2), total || 0)
+            .input('items_json',         sql.NVarChar(sql.MAX), items ? JSON.stringify(items) : null)
+            .query(`INSERT INTO Requisicion (folio,id_usuario,nombre_solicitante,area,observaciones,total,items_json)
+                    OUTPUT INSERTED.id_requisicion, INSERTED.folio
+                    VALUES (@folio,@id_usuario,@nombre_solicitante,@area,@observaciones,@total,@items_json)`);
+        res.json(result.recordset[0]);
+    } catch (err) {
+        console.error("Error creando requisicion:", err);
+        res.status(500).send("Error al crear requisición");
+    }
+});
+
+app.get("/requisiciones", async (req, res) => {
+    const { area } = req.query;
+    try {
+        const r = pool.request();
+        let where = area ? "WHERE area = @area" : "";
+        if (area) r.input('area', sql.NVarChar(100), area);
+        const result = await r.query(`
+            SELECT id_requisicion, folio, nombre_solicitante, area, fecha, total, estado, observaciones, items_json
+            FROM Requisicion ${where}
+            ORDER BY fecha DESC
+        `);
+        res.json(result.recordset);
+    } catch (err) {
+        console.error("Error obteniendo requisiciones:", err);
+        res.status(500).send("Error al obtener requisiciones");
     }
 });
 

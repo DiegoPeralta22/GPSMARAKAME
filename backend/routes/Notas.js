@@ -6,8 +6,13 @@ node index.js
 npm run dev
 
 roles bd: 
-5.- Clinico
-4.- Medico
-3.-- Admision
-
+1.- adminitrador: admin@admin.com 1234
+5.- Clinico :  clini@clini.com 1234
+4.- Medico  :  medico@medico.com  1234
+admision@admision.com3.-- Admision:  1234 
+ejecutar backend: 
+    node index.js
+ejecutar fronted
+    npm run dev
 */
+

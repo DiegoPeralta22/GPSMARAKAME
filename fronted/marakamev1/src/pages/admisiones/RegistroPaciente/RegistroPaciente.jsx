@@ -14,16 +14,30 @@ const IcoShield = () => <svg width="17" height="17" viewBox="0 0 24 24" fill="no
 const IcoDoc    = () => <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="12" y2="17"/></svg>;
 const IcoFolder = () => <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>;
 
-export default function RegistroPaciente() {
+export default function RegistroPaciente({ embedded = false, presetId = null, onClose = null }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const editId = searchParams.get("id");
+  const editId = presetId ? String(presetId) : searchParams.get("id");
   const today = new Date().toISOString().slice(0, 16);
+  const maxNacimiento = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
   const usuario = JSON.parse(localStorage.getItem("usuario"));
   const [guardando, setGuardando] = useState(false);
   const [editCuestionarioId, setEditCuestionarioId] = useState(null);
 
   useEffect(() => {
+    // Reset all fields so switching patients never shows stale data
+    setFuente(""); setNombreSolicitante(""); setParentesco(""); setProcedencia("");
+    setDomicilioSolicitante(""); setTelefonoSolicitante(""); setCelularSolicitante("");
+    setOcupacionSolicitante(""); setFechaNacimientoSolicitante(""); setGeneroSolicitante("");
+    setNombrePaciente(""); setApellidoPaciente(""); setFechaNacimientoPaciente("");
+    setGeneroPaciente(""); setOrientacionSexual(""); setGruposVulnerables("");
+    setEdad(""); setEstadoCivil(""); setNumHijos(""); setDomicilioPaciente("");
+    setEscolaridad(""); setLugarOrigen(""); setTelefonoPaciente(""); setOcupacionPaciente("");
+    setSustancias([]); setOtraSustancia(""); setAceptaInternarse("");
+    setRequiereIntervencion(""); setTratamientoPrevio(""); setDonde("");
+    setObservacionesValoracion(""); setEstado(""); setFechaInternamiento("");
+    setMedicoValoro(""); setObservacionesMedicas(""); setEditCuestionarioId(null);
+
     if (!editId) return;
     (async () => {
       try {
@@ -46,6 +60,8 @@ export default function RegistroPaciente() {
           setOcupacionPaciente(pac.ocupacion || "");
           setOrientacionSexual(pac.orientacion_sexual || "");
           setGruposVulnerables(pac.grupos_vulnerables || "");
+          if (pac.fecha_nacimiento) setFechaNacimientoPaciente(String(pac.fecha_nacimiento).slice(0, 10));
+          if (pac.genero) setGeneroPaciente(pac.genero);
         }
         setEditCuestionarioId(respData.id_cuestionario);
         const r = {};
@@ -58,6 +74,8 @@ export default function RegistroPaciente() {
         if (r[8]) setCelularSolicitante(r[8]);
         if (r[9]) setOcupacionSolicitante(r[9]);
         if (r[10]) setParentesco(r[10]);
+        if (r[14]) setNumHijos(r[14]);
+        if (r[17]) setLugarOrigen(r[17]);
         if (r[20] && r[20].trim()) {
           const knowns = ["Alcohol","Cocaína","Marihuana","Base","Éxtasis","Tabaco","BZD","Inhalantes","TCA","Ludopatía","Ácidos"];
           const parts = r[20].split(", ");
@@ -72,6 +90,10 @@ export default function RegistroPaciente() {
         if (r[25]) setObservacionesValoracion(r[25]);
         if (r[26]) setEstado(r[26]);
         if (r[29]) setFechaInternamiento(r[29]);
+        if (r[32]) setGeneroSolicitante(r[32]);
+        if (r[33]) setFechaNacimientoSolicitante(r[33]);
+        if (r[34]) setEstadoCivilSolicitante(r[34]);
+        if (r[35]) setEscolaridadSolicitante(r[35]);
       } catch(e) { console.error("Error cargando cuestionario:", e); }
     })();
   }, [editId]);
@@ -89,6 +111,8 @@ export default function RegistroPaciente() {
   const [ocupacionSolicitante, setOcupacionSolicitante] = useState("");
   const [fechaNacimientoSolicitante, setFechaNacimientoSolicitante] = useState("");
   const [generoSolicitante, setGeneroSolicitante] = useState("");
+  const [estadoCivilSolicitante, setEstadoCivilSolicitante] = useState("");
+  const [escolaridadSolicitante, setEscolaridadSolicitante] = useState("");
 
   // SECCIÓN 3 - PACIENTE
   const [nombrePaciente, setNombrePaciente] = useState("");
@@ -132,6 +156,10 @@ export default function RegistroPaciente() {
   const handleSubmit = async () => {
     if (!nombrePaciente.trim()) {
       alert("El nombre del paciente es requerido");
+      return;
+    }
+    if (fechaInternamiento && new Date(fechaInternamiento) < new Date()) {
+      alert("La fecha de internamiento no puede ser anterior a la fecha y hora actual.");
       return;
     }
     setGuardando(true);
@@ -235,6 +263,10 @@ export default function RegistroPaciente() {
         { id_pregunta: 29, respuesta: fechaInternamiento },
         { id_pregunta: 30, respuesta: medicoValoro },
         { id_pregunta: 31, respuesta: observacionesMedicas },
+        { id_pregunta: 32, respuesta: generoSolicitante },
+        { id_pregunta: 33, respuesta: fechaNacimientoSolicitante },
+        { id_pregunta: 34, respuesta: estadoCivilSolicitante },
+        { id_pregunta: 35, respuesta: escolaridadSolicitante },
       ];
 
       const resIngreso = await fetch("http://localhost:3000/ingreso", {
@@ -244,22 +276,38 @@ export default function RegistroPaciente() {
       });
 
       if (resIngreso.ok) {
-        // Si hay fecha de internamiento, crear una cita en el módulo de Agenda
-        if (fechaInternamiento && id_paciente_creado) {
-          await fetch("http://localhost:3000/citas", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              id_paciente: id_paciente_creado,
-              fecha: fechaInternamiento.length === 16 ? fechaInternamiento + ":00" : fechaInternamiento,
-              tipo: "Primera vez",
-              familiar_nombre: nombreSolicitante || null,
-              id_usuario: usuario?.id_usuario || null,
-            }),
-          }).catch(() => {});
+        // Solo crear cita para pacientes NUEVOS; al editar la cita ya existe
+        if (!editId && fechaInternamiento && id_paciente_creado) {
+          try {
+            const citasExist = await fetch("http://localhost:3000/citas").then(r => r.json()).catch(() => []);
+            const nuevaMs = new Date(fechaInternamiento.replace("T", " ").slice(0, 16)).getTime();
+            const DOS_H = 2 * 60 * 60 * 1000;
+            const choque = citasExist.find(c => {
+              if (c.estado === "cancelada") return false;
+              const s = String(c.fecha).replace(/Z$/, "").replace(/\+.*/, "").split(".")[0];
+              const existeMs = new Date(s.replace("T", " ")).getTime();
+              return Math.abs(nuevaMs - existeMs) < DOS_H;
+            });
+            if (choque) {
+              alert(`La fecha de internamiento choca con una cita existente (${choque.nombre_paciente} ${choque.apellido_paciente}). La cita no se agendó, pero el registro sí se guardó.`);
+            } else {
+              await fetch("http://localhost:3000/citas", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  id_paciente: id_paciente_creado,
+                  fecha: fechaInternamiento.length === 16 ? fechaInternamiento + ":00" : fechaInternamiento,
+                  tipo: "Primera vez",
+                  familiar_nombre: nombreSolicitante || null,
+                  id_usuario: usuario?.id_usuario || null,
+                }),
+              });
+            }
+          } catch { /* no bloquear el flujo por fallo en cita */ }
         }
         alert(editId ? "Cuestionario actualizado correctamente" : "Registro guardado correctamente");
-        navigate(editId ? "/validacion" : "/admisiones");
+        if (onClose) onClose();
+        else navigate(editId ? "/validacion" : "/admisiones");
       } else {
         alert("Error al guardar: " + await resIngreso.text());
       }
@@ -271,18 +319,18 @@ export default function RegistroPaciente() {
     }
   };
 
-  return (
-    <div className="dashboard">
-
-      {/* SIDEBAR */}
-      <div className="adm-sidebar">
+  const adm_sidebar = (
+    <div className="adm-sidebar">
+      <div className="adm-sidebar-top">
         <h2>MARAKAME</h2>
         <p className="user">ADMISIONES: {usuario?.nombre || "—"}</p>
+      </div>
+      <nav>
         <ul>
           <li onClick={() => navigate("/")}><IcoGrid />Inicio</li>
           <li onClick={() => navigate("/admisiones")}><IcoHome />Admisiones</li>
           <li onClick={() => navigate("/pacientes")}><IcoUsers />Pacientes</li>
-          <li className="active"><IcoUser />Agregar Paciente</li>
+          <li className="active"><IcoUser />Preregistro</li>
           <li onClick={() => navigate("/historial")}><IcoFile />Historial clínico</li>
           <li onClick={() => navigate("/estudio")}><IcoMoney />Estudio Socioeconómico</li>
           <li onClick={() => navigate("/citas")}><IcoCal />Agenda de Citas</li>
@@ -290,17 +338,21 @@ export default function RegistroPaciente() {
           <li onClick={() => navigate("/preingreso")}><IcoDoc />Preingreso</li>
           <li onClick={() => navigate("/expedientes")}><IcoFolder />Expedientes</li>
         </ul>
+      </nav>
+      <div className="adm-sidebar-bottom">
         <button className="adm-btn" onClick={() => navigate("/registro")}>+ Registro de Paciente</button>
       </div>
-
-      {/* MAIN */}
-      <main className="main">
+    </div>
+  );
+  const wrap = (m) => embedded ? m : <div className="dashboard">{adm_sidebar}{m}</div>;
+  return wrap(
+    <main className="main">
 
         {/* TOPBAR - sticky */}
         <div className="topbar">
           <h2>{editId ? "Completar Cuestionario" : "Registro Inicial MARAKAME"}</h2>
           <div className="actions">
-            <button className="btn-cancel" onClick={() => navigate(editId ? "/validacion" : "/admisiones")}>Cancelar</button>
+            <button className="btn-cancel" onClick={() => onClose ? onClose() : navigate(editId ? "/validacion" : "/admisiones")}>Cancelar</button>
             <button className="btn-save" onClick={handleSubmit} disabled={guardando}>
               {guardando ? "Guardando..." : editId ? "Guardar Cuestionario" : "Guardar y Notificar a Médico"}
             </button>
@@ -334,7 +386,10 @@ export default function RegistroPaciente() {
             <h3>SECCIÓN 2: DATOS DEL SOLICITANTE</h3>
             <div className="grid-2">
               <input placeholder="Nombre completo del solicitante" value={nombreSolicitante} onChange={e => setNombreSolicitante(e.target.value)} />
-              <input type="date" placeholder="Fecha de nacimiento del solicitante" value={fechaNacimientoSolicitante} onChange={e => setFechaNacimientoSolicitante(e.target.value)} />
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <span style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".3px" }}>Fecha de nacimiento del solicitante</span>
+                <input type="date" max={maxNacimiento} value={fechaNacimientoSolicitante} onChange={e => setFechaNacimientoSolicitante(e.target.value)} />
+              </div>
               <select value={generoSolicitante} onChange={e => setGeneroSolicitante(e.target.value)}>
                 <option value="">Género del solicitante</option>
                 <option>Masculino</option>
@@ -360,6 +415,14 @@ export default function RegistroPaciente() {
               <input placeholder="Teléfono" value={telefonoSolicitante} onChange={e => setTelefonoSolicitante(e.target.value)} />
               <input placeholder="Celular" value={celularSolicitante} onChange={e => setCelularSolicitante(e.target.value)} />
               <input placeholder="Ocupación" value={ocupacionSolicitante} onChange={e => setOcupacionSolicitante(e.target.value)} />
+              <select value={estadoCivilSolicitante} onChange={e => setEstadoCivilSolicitante(e.target.value)}>
+                <option value="">Estado civil del solicitante</option>
+                <option>Soltero/a</option><option>Casado/a</option><option>Divorciado/a</option><option>Viudo/a</option><option>Unión libre</option>
+              </select>
+              <select value={escolaridadSolicitante} onChange={e => setEscolaridadSolicitante(e.target.value)}>
+                <option value="">Escolaridad del solicitante</option>
+                <option>Sin estudios</option><option>Primaria</option><option>Secundaria</option><option>Preparatoria</option><option>Universidad</option><option>Posgrado</option>
+              </select>
             </div>
           </div>
 
@@ -369,13 +432,14 @@ export default function RegistroPaciente() {
             <div className="grid-3">
               <input placeholder="Nombre(s) del paciente *" value={nombrePaciente} onChange={e => setNombrePaciente(e.target.value)} />
               <input placeholder="Apellidos del paciente" value={apellidoPaciente} onChange={e => setApellidoPaciente(e.target.value)} />
-              <input type="date" placeholder="Fecha de nacimiento del paciente" value={fechaNacimientoPaciente} onChange={e => setFechaNacimientoPaciente(e.target.value)} />
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <span style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".3px" }}>Fecha de nacimiento del paciente</span>
+                <input type="date" max={maxNacimiento} value={fechaNacimientoPaciente} onChange={e => setFechaNacimientoPaciente(e.target.value)} />
+              </div>
               <select value={generoPaciente} onChange={e => setGeneroPaciente(e.target.value)}>
                 <option value="">Género del paciente</option>
                 <option>Masculino</option>
                 <option>Femenino</option>
-                <option>No binario</option>
-                <option>Prefiero no decir</option>
                 <option>Otro</option>
               </select>
               <select value={orientacionSexual} onChange={e => setOrientacionSexual(e.target.value)}>
@@ -460,9 +524,21 @@ export default function RegistroPaciente() {
                 <option>Sí</option>
                 <option>No</option>
               </select>
-              <input placeholder="¿Dónde?" value={donde} onChange={e => setDonde(e.target.value)} />
+              <input
+                placeholder="¿Dónde?"
+                value={tratamientoPrevio === "Sí" ? donde : ""}
+                onChange={e => setDonde(e.target.value)}
+                disabled={tratamientoPrevio !== "Sí"}
+                style={{ background: tratamientoPrevio !== "Sí" ? "#f3f4f6" : undefined, cursor: tratamientoPrevio !== "Sí" ? "not-allowed" : undefined, color: tratamientoPrevio !== "Sí" ? "#9ca3af" : undefined }}
+              />
             </div>
-            <textarea style={{marginTop: "14px"}} placeholder="Conclusión / Observaciones" value={observacionesValoracion} onChange={e => setObservacionesValoracion(e.target.value)} />
+            <textarea
+              style={{ marginTop: "14px", background: requiereIntervencion === "No" ? "#f3f4f6" : undefined, cursor: requiereIntervencion === "No" ? "not-allowed" : undefined }}
+              placeholder={requiereIntervencion === "No" ? "No aplica — no requiere intervención" : "Conclusión / Observaciones"}
+              value={requiereIntervencion === "No" ? "" : observacionesValoracion}
+              disabled={requiereIntervencion === "No"}
+              onChange={e => setObservacionesValoracion(e.target.value)}
+            />
           </div>
 
           {/* SECCIÓN 5 */}
@@ -480,7 +556,10 @@ export default function RegistroPaciente() {
                 <option value="egresado">Egresado</option>
                 <option value="rechazado_adm">Rechazado</option>
               </select>
-              <input type="datetime-local" value={fechaInternamiento} onChange={e => setFechaInternamiento(e.target.value)} />
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <span style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".3px" }}>Fecha de internamiento</span>
+                <input type="datetime-local" min={today} value={fechaInternamiento} onChange={e => setFechaInternamiento(e.target.value)} />
+              </div>
               <input placeholder="Médico que valoró" value={medicoValoro} readOnly style={{background:"#f3f4f6", color:"#9ca3af", cursor:"not-allowed"}} />
             </div>
             <textarea style={{marginTop:"14px", background:"#f3f4f6", color:"#9ca3af", cursor:"not-allowed"}} placeholder="Pendiente de valoración médica" value={observacionesMedicas} readOnly />
@@ -488,14 +567,13 @@ export default function RegistroPaciente() {
 
           {/* FOOTER */}
           <div className="footer">
-            <button className="btn-cancel" onClick={() => navigate(editId ? "/validacion" : "/admisiones")}>{editId ? "Cancelar" : "Descartar Borrador"}</button>
+            <button className="btn-cancel" onClick={() => onClose ? onClose() : navigate(editId ? "/validacion" : "/admisiones")}>{editId ? "Cancelar" : "Descartar Borrador"}</button>
             <button className="btn-save" onClick={handleSubmit} disabled={guardando}>
               {guardando ? "Guardando..." : editId ? "Guardar Cuestionario" : "Finalizar Registro y Notificar"}
             </button>
           </div>
 
         </div>
-      </main>
-    </div>
+    </main>
   );
 }
